@@ -1,0 +1,17 @@
+# Alembic Database Migrations
+
+This directory contains Alembic migration scripts for HealthWatch PostgreSQL/PostGIS schemas.
+
+## Usage
+- Generate a new migration revision:
+  ```bash
+  alembic revision --autogenerate -m "create_initial_tables"
+  ```
+- Apply migrations:
+  ```bash
+  alembic upgrade head
+  ```
+- Rollback one migration:
+  ```bash
+  alembic downgrade -1
+  ```

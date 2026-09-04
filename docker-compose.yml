@@ -1,0 +1,94 @@
+services:
+  # ============================================================================
+  # Database Service: PostgreSQL + PostGIS Extension
+  # ============================================================================
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: healthwatch-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-healthwatch_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthwatch_secure_password_123}
+      POSTGRES_DB: ${POSTGRES_DB:-healthwatch_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-healthwatch_user} -d ${POSTGRES_DB:-healthwatch_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - healthwatch-net
+
+  # ============================================================================
+  # Backend Service: FastAPI Application
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: healthwatch-backend
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEBUG=${DEBUG:-True}
+      - APP_NAME=${APP_NAME:-HealthWatch}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - API_V1_STR=${API_V1_STR:-/api/v1}
+      - SECRET_KEY=${SECRET_KEY:-change_this_to_a_super_secret_key_in_production_minimum_32_chars}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-healthwatch_user}:${POSTGRES_PASSWORD:-healthwatch_secure_password_123}@db:5432/${POSTGRES_DB:-healthwatch_db}
+      - BACKEND_CORS_ORIGINS=["http://localhost:5173","http://localhost:3000","http://127.0.0.1:5173"]
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./tests:/app/tests:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - healthwatch-net
+
+  # ============================================================================
+  # Frontend Service: React + TypeScript + Vite Application
+  # ============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: healthwatch-frontend
+    restart: unless-stopped
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_APP_TITLE=HealthWatch Surveillance System
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/package.json:/app/package.json
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - healthwatch-net
+
+networks:
+  healthwatch-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local

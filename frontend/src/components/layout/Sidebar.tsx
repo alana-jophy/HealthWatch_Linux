@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
   MapPin,
@@ -15,7 +16,8 @@ import {
   Activity,
   Clock,
   Biohazard,
-  ShieldAlert
+  ShieldAlert,
+  LogOut
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,8 +25,6 @@ interface SidebarProps {
   onSelectTab: (tabId: string) => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
-  currentRole?: 'PATIENT' | 'OFFICER';
-  onToggleRole?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,23 +32,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   isOpenMobile,
   onCloseMobile,
-  currentRole = 'PATIENT',
-  onToggleRole,
 }) => {
-  const isPatient = currentRole === 'PATIENT';
+  const { user, role, logout } = useAuth();
+  const isPatient = role === 'PATIENT';
 
   const patientMenuItems = [
     { id: 'patient-dashboard', label: 'My Dashboard', icon: LayoutDashboard },
     { id: 'patient-profile', label: 'My Profile', icon: User },
-    { id: 'patient-disease-case', label: 'My Disease Case', icon: Activity },
-    { id: 'patient-monitoring', label: 'My Monitoring', icon: UserCheck, badge: 'Consent' },
+    { id: 'patient-disease-case', label: 'My Health Info', icon: Activity },
+    { id: 'patient-monitoring', label: 'My Monitoring', icon: UserCheck, badge: 'Real GPS' },
     { id: 'patient-location-history', label: 'My Location History', icon: Clock },
     { id: 'patient-roadmap', label: 'My Movement Roadmap', icon: Route, badge: '15-min' },
   ];
 
   const officerMenuItems = [
     { id: 'dashboard', label: 'Surveillance Dashboard', icon: LayoutDashboard },
-    { id: 'patient-management', label: 'Patient Management', icon: Users },
+    { id: 'patient-management', label: 'Patient Management', icon: Users, badge: 'CRUD' },
     { id: 'disease-management', label: 'Disease Management', icon: Biohazard },
     { id: 'gis', label: 'Geographic Map (GIS)', icon: MapPin },
     { id: 'heatmap', label: 'Disease Hotspot Heatmap', icon: Flame },
@@ -158,34 +157,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </div>
 
-        {/* Role Switcher */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/60">
-          <div className="text-[10px] font-mono uppercase text-slate-500 mb-2 flex items-center justify-between">
-            <span>Session Role</span>
-            <span className="text-emerald-400 font-bold">{currentRole}</span>
-          </div>
-          {onToggleRole && (
-            <button
-              onClick={onToggleRole}
-              className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
-            >
-              <Users className="w-3.5 h-3.5 text-brand-400" />
-              <span>Switch to {isPatient ? 'Officer View' : 'Patient View'}</span>
-            </button>
-          )}
-        </div>
-
-        {/* System Node Information Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
+        {/* User Profile & Sign Out Footer */}
+        <div className="p-4 border-t border-slate-800 bg-slate-950/60 space-y-3">
           <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <div className="text-xs">
-              <div className="font-semibold text-slate-300">{isPatient ? 'Patient Session Active' : 'Node KL-SURV-01'}</div>
-              <div className="text-[10px] text-slate-500 font-mono">
-                {isPatient ? 'RBAC &bull; Isolated Records' : 'PostGIS SRID:4326 &bull; FastAPI'}
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-xs shrink-0 ${
+              isPatient
+                ? 'bg-gradient-to-tr from-emerald-600 to-brand-500'
+                : 'bg-gradient-to-tr from-brand-600 to-cyan-500'
+            }`}>
+              {user?.full_name ? user.full_name.substring(0, 2).toUpperCase() : 'HW'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-white truncate">
+                {user?.full_name || 'Authenticated User'}
+              </div>
+              <div className="text-[10px] font-mono text-slate-400 truncate">
+                {user?.email || 'user@healthwatch.org'}
               </div>
             </div>
           </div>
+
+          <button
+            onClick={logout}
+            className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-500/30 text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-sm"
+          >
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>Sign Out</span>
+          </button>
         </div>
       </aside>
     </>

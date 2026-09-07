@@ -13,6 +13,10 @@ class RoadmapObservationItem(BaseModel):
     accuracy: Optional[float] = None
     source: str = Field("PATIENT_GPS", description="Data source: PATIENT_GPS, HEALTH_WORKER, APPROXIMATE, SIMULATED")
     session_id: Optional[uuid.UUID] = None
+    district_name: Optional[str] = None
+    local_body_name: Optional[str] = None
+    ward_name: Optional[str] = None
+    ward_number: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,6 +50,7 @@ class PatientRoadmapResponse(BaseModel):
     patient_id: uuid.UUID
     patient_pseudo_id: str
     patient_name: Optional[str] = None
+    disease_name: Optional[str] = None
     session_id: Optional[uuid.UUID] = None
     filter_date: Optional[str] = None
     start_time: Optional[str] = None

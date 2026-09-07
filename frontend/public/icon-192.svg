@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0369a1" />
+      <stop offset="50%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+    <linearGradient id="shield" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e0f2fe" />
+    </linearGradient>
+  </defs>
+  <!-- Rounded Base Background -->
+  <rect width="192" height="192" rx="42" fill="#020617"/>
+  <rect x="8" y="8" width="176" height="176" rx="36" fill="url(#bg)"/>
+  
+  <!-- Shield Outline -->
+  <path d="M 96 32 C 124 32, 148 40, 152 44 C 152 88, 136 136, 96 160 C 56 136, 40 88, 40 44 C 44 40, 68 32, 96 32 Z" fill="#0c4a6e" opacity="0.6"/>
+  
+  <path d="M 96 38 C 120 38, 142 45, 146 48 C 146 86, 132 128, 96 150 C 60 128, 46 86, 46 48 C 50 45, 72 38, 96 38 Z" fill="url(#shield)"/>
+  
+  <!-- Cross Symbol -->
+  <path d="M 88 64 L 104 64 L 104 88 L 128 88 L 128 104 L 104 104 L 104 128 L 88 128 L 88 104 L 64 104 L 64 88 L 88 88 Z" fill="#0284c7"/>
+</svg>

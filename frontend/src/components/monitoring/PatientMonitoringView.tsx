@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   fetchMonitoringStatus, 
   grantLocationConsent, 
   revokeLocationConsent, 
   startMonitoringSession, 
   stopMonitoringSession,
-  submitLocationObservation 
+  submitLocationObservation,
+  fetchMyLocationHistory,
+  fetchMyPatientProfile
 } from '../../services/api';
-import { PatientMonitoringStatus } from '../../types';
+import { PatientMonitoringStatus, PatientLocationHistoryItem, PatientProfile } from '../../types';
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -17,37 +19,64 @@ import {
   AlertCircle, 
   Radio, 
   Power, 
-  RefreshCw,
-  Info,
-  Lock,
-  UserCheck,
-  Send,
-  Navigation
+  RefreshCw, 
+  Info, 
+  Lock, 
+  UserCheck, 
+  Send, 
+  Navigation,
+  Smartphone,
+  Compass,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 export const PatientMonitoringView: React.FC = () => {
   const [statusData, setStatusData] = useState<PatientMonitoringStatus | null>(null);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
+  const [lastObservation, setLastObservation] = useState<PatientLocationHistoryItem | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
-  const [devicePermissionGranted, setDevicePermissionGranted] = useState<boolean>(false);
+  const [liveGpsLoading, setLiveGpsLoading] = useState<boolean>(false);
+  const [devicePermissionState, setDevicePermissionState] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt');
+  const [showPermissionModal, setShowPermissionModal] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [showSimulatorSection, setShowSimulatorSection] = useState<boolean>(false);
 
-  // Monitoring Period Datetime Selectors
-  const [customStart, setCustomStart] = useState<string>('');
-  const [customEnd, setCustomEnd] = useState<string>('');
-
-  // Observation submission simulator state
+  // Demonstration Simulation State (strictly labeled as SIMULATED)
   const [simLat, setSimLat] = useState<number>(8.5241);
   const [simLng, setSimLng] = useState<number>(76.9366);
   const [simLoading, setSimLoading] = useState<boolean>(false);
 
-  const loadStatus = async () => {
+  // Interval reference for periodic phone background telemetry while tab is active
+  const telemetryIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const statusDataRef = useRef<PatientMonitoringStatus | null>(null);
+
+  useEffect(() => {
+    statusDataRef.current = statusData;
+  }, [statusData]);
+
+  const loadStatus = async (): Promise<PatientMonitoringStatus | null> => {
     setIsLoading(true);
     try {
-      const data = await fetchMonitoringStatus();
-      setStatusData(data);
+      const [statusRes, historyRes, profileRes] = await Promise.all([
+        fetchMonitoringStatus().catch(() => null),
+        fetchMyLocationHistory(1, 0).catch(() => null),
+        fetchMyPatientProfile().catch(() => null),
+      ]);
+      setStatusData(statusRes);
+      statusDataRef.current = statusRes;
+      setPatientProfile(profileRes);
+      if (historyRes && historyRes.items && historyRes.items.length > 0) {
+        setLastObservation(historyRes.items[0]);
+      } else {
+        setLastObservation(null);
+      }
+      return statusRes;
     } catch (err) {
       console.error('Failed to load patient monitoring status:', err);
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -55,29 +84,35 @@ export const PatientMonitoringView: React.FC = () => {
 
   useEffect(() => {
     loadStatus();
+
+    // Check device geolocation availability
+    if (!('geolocation' in navigator)) {
+      setDevicePermissionState('unsupported');
+    } else if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' as PermissionName })
+        .then((res) => {
+          if (res.state === 'granted') setDevicePermissionState('granted');
+          else if (res.state === 'denied') setDevicePermissionState('denied');
+          else setDevicePermissionState('prompt');
+        })
+        .catch(() => setDevicePermissionState('prompt'));
+    }
+
+    return () => {
+      if (telemetryIntervalRef.current) {
+        clearInterval(telemetryIntervalRef.current);
+      }
+    };
   }, []);
 
-  // Check browser OS geolocation permission
-  const handleRequestOSPermission = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setDevicePermissionGranted(true);
-          setSimLat(pos.coords.latitude);
-          setSimLng(pos.coords.longitude);
-          setMessage({ text: 'Device GPS permission authorized.', type: 'success' });
-        },
-        (err) => {
-          setDevicePermissionGranted(false);
-          setMessage({ text: `Device location permission notice: ${err.message}`, type: 'error' });
-        }
-      );
-    } else {
-      setMessage({ text: 'Geolocation is not supported by this browser.', type: 'error' });
-    }
+  // Compute minutes since last observation
+  const getMinutesAgo = (): number | null => {
+    if (!lastObservation) return null;
+    const diffMs = Date.now() - new Date(lastObservation.recorded_at).getTime();
+    return Math.max(0, Math.floor(diffMs / 60000));
   };
 
-  // Step 1: Grant Consent
+  // Step 1: Grant Explicit Consent (14 Days)
   const handleGrantConsent = async () => {
     setActionLoading(true);
     setMessage(null);
@@ -99,6 +134,7 @@ export const PatientMonitoringView: React.FC = () => {
     try {
       await revokeLocationConsent();
       setMessage({ text: 'Location consent revoked. All active monitoring sessions terminated.', type: 'info' });
+      if (telemetryIntervalRef.current) clearInterval(telemetryIntervalRef.current);
       await loadStatus();
     } catch (err: any) {
       setMessage({ text: err.response?.data?.detail || 'Failed to revoke consent.', type: 'error' });
@@ -111,14 +147,32 @@ export const PatientMonitoringView: React.FC = () => {
   const handleStartSession = async () => {
     setActionLoading(true);
     setMessage(null);
+    const intervalMins = statusDataRef.current?.sampling_interval_minutes || statusData?.sampling_interval_minutes || 15;
     try {
-      await startMonitoringSession(
-        customStart ? new Date(customStart).toISOString() : undefined,
-        customEnd ? new Date(customEnd).toISOString() : undefined,
-        24
+      const sessionRes = await startMonitoringSession(
+        undefined,
+        undefined,
+        24,
+        intervalMins
       );
-      setMessage({ text: 'Authorized monitoring session started. Telemetry active.', type: 'success' });
-      await loadStatus();
+      setMessage({ text: 'Authorized monitoring session started. Real GPS telemetry active.', type: 'success' });
+      const updatedStatus = await loadStatus();
+
+      const activeSessionId = sessionRes?.id || updatedStatus?.active_session?.id || statusDataRef.current?.active_session?.id;
+
+      // Immediately attempt to capture initial GPS observation using newly activated session
+      if (activeSessionId) {
+        setTimeout(() => {
+          handleCaptureRealGpsObservation(activeSessionId);
+        }, 500);
+      }
+
+      // Start periodic collection interval matching configured sampling interval
+      if (telemetryIntervalRef.current) clearInterval(telemetryIntervalRef.current);
+      telemetryIntervalRef.current = setInterval(() => {
+        handleCaptureRealGpsObservation(activeSessionId);
+      }, intervalMins * 60 * 1000);
+
     } catch (err: any) {
       const errMsg = err.response?.data?.error?.message || err.response?.data?.detail || 'Failed to start monitoring session.';
       setMessage({ text: errMsg, type: 'error' });
@@ -133,7 +187,8 @@ export const PatientMonitoringView: React.FC = () => {
     setMessage(null);
     try {
       await stopMonitoringSession();
-      setMessage({ text: 'Monitoring session stopped.', type: 'info' });
+      if (telemetryIntervalRef.current) clearInterval(telemetryIntervalRef.current);
+      setMessage({ text: 'Monitoring session stopped. Telemetry collection suspended.', type: 'info' });
       await loadStatus();
     } catch (err: any) {
       setMessage({ text: err.response?.data?.detail || 'Failed to stop session.', type: 'error' });
@@ -142,22 +197,97 @@ export const PatientMonitoringView: React.FC = () => {
     }
   };
 
-  // Step 5: Test Periodic Location Submission
+  // Step 5: Capture REAL Phone GPS Location via Device Browser
+  const handleCaptureRealGpsObservation = (overrideSessionId?: string) => {
+    const activeSessionId = overrideSessionId || statusDataRef.current?.active_session?.id || statusData?.active_session?.id;
+    if (!activeSessionId) {
+      setMessage({ 
+        text: 'Cannot capture GPS: No active monitoring session exists. Please click START MONITORING first.', 
+        type: 'error' 
+      });
+      return;
+    }
+
+    if (!('geolocation' in navigator)) {
+      setMessage({ 
+        text: 'Geolocation is not supported by your mobile browser. Please use Chrome/Firefox on Android or iOS Safari.', 
+        type: 'error' 
+      });
+      return;
+    }
+
+    setLiveGpsLoading(true);
+    setMessage(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        setDevicePermissionState('granted');
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy || 5.0;
+
+        try {
+          // Strictly submitted as source = PATIENT_GPS
+          await submitLocationObservation(
+            activeSessionId,
+            lat,
+            lng,
+            accuracy,
+            'PATIENT_GPS'
+          );
+
+          setMessage({
+            text: `Real Phone GPS Observation Recorded: (${lat.toFixed(5)}, ${lng.toFixed(5)}) ±${accuracy.toFixed(1)}m [Source: PATIENT_GPS]`,
+            type: 'success'
+          });
+
+          await loadStatus();
+        } catch (err: any) {
+          const detail = err.response?.data?.detail || err.response?.data?.error?.message || 'Backend rejected location observation.';
+          setMessage({ text: `Observation Rejected: ${detail}`, type: 'error' });
+        } finally {
+          setLiveGpsLoading(false);
+        }
+      },
+      (err) => {
+        setLiveGpsLoading(false);
+        let reason = 'Failed to retrieve location from phone hardware.';
+        if (err.code === 1) {
+          setDevicePermissionState('denied');
+          reason = 'Location permission denied by browser. Please tap the lock icon in the address bar and allow location access.';
+        } else if (err.code === 2) {
+          reason = 'Position unavailable. Ensure Phone GPS / Location Services is turned ON in your phone settings.';
+        } else if (err.code === 3) {
+          reason = 'GPS acquisition request timed out. Please try again.';
+        }
+        setMessage({ text: `GPS Error: ${reason}`, type: 'error' });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0
+      }
+    );
+  };
+
+  // Step 6: Test Simulated Location Submission (Clearly marked as DEMONSTRATION)
   const handleTestSubmitLocation = async () => {
     if (!statusData?.active_session) {
-      setMessage({ text: 'Cannot submit location: No active monitoring session exists.', type: 'error' });
+      setMessage({ text: 'Cannot submit simulated location: No active monitoring session exists.', type: 'error' });
       return;
     }
     setSimLoading(true);
     setMessage(null);
     try {
-      const res = await submitLocationObservation(
+      await submitLocationObservation(
         statusData.active_session.id,
         simLat,
         simLng,
-        5.0
+        5.0,
+        'SIMULATED'
       );
-      setMessage({ text: `Observation accepted & verified: (${simLat.toFixed(4)}, ${simLng.toFixed(4)})`, type: 'success' });
+      setMessage({ text: `Demonstration Observation recorded: (${simLat.toFixed(4)}, ${simLng.toFixed(4)}) [Source: SIMULATED]`, type: 'info' });
+      await loadStatus();
     } catch (err: any) {
       const errMsg = err.response?.data?.error?.message || err.response?.data?.detail || 'Location submission rejected.';
       setMessage({ text: `Submission Rejected: ${errMsg}`, type: 'error' });
@@ -166,46 +296,65 @@ export const PatientMonitoringView: React.FC = () => {
     }
   };
 
+  const minutesAgo = getMinutesAgo();
+  const sessionStatus = statusData?.has_active_session 
+    ? 'ACTIVE' 
+    : statusData?.active_session?.status || 'NOT ACTIVE';
+
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Title & Header Banner */}
       <div className="glass-panel rounded-2xl p-6 md:p-8 space-y-3 border border-slate-800">
         <div className="flex items-center gap-2 text-xs font-semibold text-brand-400">
-          <UserCheck className="w-4 h-4" />
-          <span>Patient Surveillance Node &bull; Strict Consent Verification</span>
+          <Smartphone className="w-4 h-4" />
+          <span>Patient Surveillance Node &bull; Real Phone GPS Testing</span>
         </div>
         <h1 className="font-heading text-2xl md:text-3xl font-bold text-white tracking-tight">
-          My Monitoring Dashboard
+          My Location Monitoring
         </h1>
         <p className="text-sm text-slate-400 leading-relaxed">
-          Manage your authorized surveillance observation windows. Every observation stream requires active patient consent and an authorized monitoring session.
+          Authorized spatial surveillance and epidemiological contact tracing observation stream. 
+          Uses authentic mobile GPS hardware telemetry collected approximately every {statusData?.sampling_interval_minutes || 15} minutes during an active session.
         </p>
 
         {/* Patient Identity Header */}
         <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-800 text-xs text-slate-300">
           <div>
             <span className="text-slate-500">Authenticated Patient:</span>{' '}
-            <strong className="text-white font-mono">{statusData?.patient_pseudo_id || 'PAT-SYNTH-101'}</strong>
+            <strong className="text-white font-mono">{statusData?.patient_pseudo_id || patientProfile?.pseudo_id || 'PATIENT'}</strong>
           </div>
           <div>
-            <span className="text-slate-500">Sampling Interval:</span>{' '}
-            <span className="text-cyan-400 font-medium">Approximately 15 minutes</span>
+            <span className="text-slate-500">Sampling Cadence:</span>{' '}
+            <span className="text-cyan-400 font-medium">Approximately {statusData?.sampling_interval_minutes || 15} minutes</span>
           </div>
           <div>
             <span className="text-slate-500">Telemetry Engine:</span>{' '}
-            <span className="text-emerald-400 font-mono">PostGIS SRID:4326</span>
+            <span className="text-emerald-400 font-mono">PostgreSQL / PostGIS SRID:4326</span>
           </div>
         </div>
       </div>
 
-      {/* Mandatory Explanation Notice Alert Box */}
+      {/* Notice for Patient without mobile phone */}
+      {patientProfile?.has_phone === false && (
+        <div className="glass-panel p-5 rounded-2xl border border-amber-500/30 bg-amber-950/20 text-amber-200 text-xs flex items-start gap-3">
+          <Smartphone className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h4 className="font-bold text-amber-300 text-sm">Mobile Phone GPS Telemetry Inactive</h4>
+            <p className="text-slate-300 leading-relaxed">
+              Your registered patient record indicates that you do not possess a mobile phone. Direct GPS tracking and active mobile telemetry are disabled for your profile. Your public health case management is handled directly through field visits by your assigned surveillance officer.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Mandatory Statutory Permission Explanation Box */}
       <div className="bg-brand-950/40 border border-brand-500/30 rounded-xl p-5 text-slate-200 space-y-2">
         <div className="flex items-center gap-2 text-brand-400 font-semibold text-sm">
           <Info className="w-4 h-4" />
-          <span>Surveillance Frequency Disclosure</span>
+          <span>Statutory Location Permission Notice</span>
         </div>
-        <p className="text-sm font-medium text-slate-200">
-          &ldquo;{statusData?.explanation_notice || 'HealthWatch will collect your location approximately every 15 minutes during the authorized monitoring period.'}&rdquo;
+        <p className="text-sm font-medium text-slate-200 leading-relaxed">
+          &ldquo;HealthWatch requires your location during an active authorized monitoring session. Location observations are collected approximately every 15 minutes to support disease surveillance and movement analysis.&rdquo;
         </p>
       </div>
 
@@ -221,64 +370,200 @@ export const PatientMonitoringView: React.FC = () => {
         </div>
       )}
 
-      {/* Main Monitoring Status & Session Card */}
+      {/* Permission Explanation Modal Dialog */}
+      {showPermissionModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-panel border border-brand-500/40 max-w-md w-full p-6 rounded-2xl space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 text-brand-400">
+              <Navigation className="w-6 h-6" />
+              <h3 className="font-heading font-bold text-lg text-white">Device Location Authorization</h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              HealthWatch requires your device&apos;s real GPS location during an active authorized monitoring session. 
+              Location observations are collected <strong>approximately every 15 minutes</strong> to support disease surveillance and movement analysis.
+            </p>
+            <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">
+              <div>&bull; Observations are tagged with source: <span className="text-emerald-400 font-mono font-bold">PATIENT_GPS</span></div>
+              <div>&bull; You can revoke consent or stop monitoring at any time</div>
+              <div>&bull; Real device coordinates are stored in PostGIS SRID:4326</div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowPermissionModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowPermissionModal(false);
+                  handleCaptureRealGpsObservation();
+                }}
+                className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-md flex items-center gap-2"
+              >
+                <Compass className="w-4 h-4" />
+                <span>Authorize & Capture GPS</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* Required MY LOCATION MONITORING Dashboard Card */}
+      {/* ========================================================================= */}
       <div className="glass-panel rounded-2xl p-6 space-y-6 border border-slate-800">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-          <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${statusData?.has_active_session ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'}`}></div>
-            <div>
-              <div className="text-xs text-slate-400 uppercase font-mono">Monitoring Status</div>
-              <div className="font-heading text-xl font-extrabold text-white">
-                {statusData?.has_active_session ? (
-                  <span className="text-emerald-400">ACTIVE</span>
-                ) : (
-                  <span className="text-slate-400">INACTIVE</span>
-                )}
-              </div>
-            </div>
+          <div>
+            <div className="text-[10px] text-brand-400 uppercase font-mono tracking-wider">Surveillance Telemetry Console</div>
+            <h2 className="font-heading text-xl font-bold text-white">
+              MY LOCATION MONITORING
+            </h2>
           </div>
 
           <button
             onClick={loadStatus}
+            disabled={isLoading}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-brand-400" />
-            <span>Sync Status</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-brand-400 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Sync</span>
           </button>
         </div>
 
         {/* Monitoring Metrics Matrix */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          {/* Status */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-slate-400 font-medium">Status</span>
+            <div className="font-heading text-sm font-bold">
+              {sessionStatus === 'ACTIVE' ? (
+                <span className="text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block"></span>
+                  ACTIVE
+                </span>
+              ) : (
+                <span className="text-slate-400">{sessionStatus}</span>
+              )}
+            </div>
+          </div>
+
+          {/* Consent */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-slate-400 font-medium">Consent</span>
+            <div className="font-heading text-sm font-bold">
+              {statusData?.has_active_consent ? (
+                <span className="text-emerald-400">GRANTED</span>
+              ) : (
+                <span className="text-rose-400">NOT GRANTED</span>
+              )}
+            </div>
+          </div>
+
+          {/* Monitoring Start */}
           <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-slate-400 font-medium">Monitoring Start</span>
-            <div className="font-mono text-sm text-slate-200 font-semibold">
+            <div className="font-mono text-xs text-slate-200 font-semibold truncate">
               {statusData?.active_session ? new Date(statusData.active_session.start_time).toLocaleString() : '—'}
             </div>
           </div>
 
+          {/* Monitoring End */}
           <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
             <span className="text-slate-400 font-medium">Monitoring End</span>
-            <div className="font-mono text-sm text-cyan-400 font-semibold">
+            <div className="font-mono text-xs text-cyan-400 font-semibold truncate">
               {statusData?.active_session ? new Date(statusData.active_session.end_time).toLocaleString() : '—'}
-            </div>
-          </div>
-
-          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
-            <span className="text-slate-400 font-medium">Sampling Interval</span>
-            <div className="font-mono text-sm text-emerald-400 font-semibold">
-              Approximately 15 minutes
             </div>
           </div>
         </div>
 
-        {/* Action Buttons: START / STOP */}
+        {/* Observation Status & Real GPS Metrics */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+          {/* Sampling */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-slate-400 font-medium">Sampling Cadence</span>
+            <div className="font-mono text-xs text-emerald-400 font-semibold">
+              Approximately {statusData?.sampling_interval_minutes || 15} minutes
+            </div>
+          </div>
+
+          {/* Last GPS Observation */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-slate-400 font-medium">Last GPS Observation</span>
+            <div className="font-mono text-xs text-white font-semibold truncate">
+              {lastObservation 
+                ? `${new Date(lastObservation.recorded_at).toLocaleTimeString()}`
+                : 'Waiting for first observation'}
+            </div>
+          </div>
+
+          {/* GPS Accuracy */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-slate-400 font-medium">GPS Accuracy</span>
+            <div className="font-mono text-xs text-cyan-400 font-semibold">
+              {lastObservation ? `±${(lastObservation.accuracy || 5.0).toFixed(1)} m` : '—'}
+            </div>
+          </div>
+
+          {/* Source */}
+          <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1">
+            <span className="text-slate-400 font-medium">Source</span>
+            <div>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                lastObservation?.source === 'PATIENT_GPS' 
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
+              }`}>
+                {lastObservation?.source || 'PATIENT_GPS'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Real-time Location Reception Banner */}
+        <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full shrink-0 ${lastObservation ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`}></div>
+            <div>
+              <div className="font-semibold text-slate-200">
+                {lastObservation ? (
+                  <span>
+                    Last location received: <strong className="text-white">{minutesAgo !== null ? `${minutesAgo} minute${minutesAgo === 1 ? '' : 's'} ago` : 'just now'}</strong>
+                  </span>
+                ) : (
+                  <span className="text-amber-300 font-medium">
+                    Waiting for the first GPS observation.
+                  </span>
+                )}
+              </div>
+              {lastObservation && (
+                <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                  Coordinates: ({lastObservation.latitude.toFixed(5)}, {lastObservation.longitude.toFixed(5)}) &bull; PostGIS Geometry SRID:4326
+                </div>
+              )}
+            </div>
+          </div>
+
+          {statusData?.has_active_session && (
+            <button
+              onClick={handleCaptureRealGpsObservation}
+              disabled={liveGpsLoading}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition-all shadow-md text-xs shrink-0 disabled:opacity-50"
+            >
+              <Compass className={`w-3.5 h-3.5 ${liveGpsLoading ? 'animate-spin' : ''}`} />
+              <span>{liveGpsLoading ? 'Acquiring GPS...' : 'Record Phone GPS Now'}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Action Controls: START / STOP */}
         <div className="space-y-4 pt-2">
           {statusData?.has_active_session ? (
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={handleStopSession}
                 disabled={actionLoading}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold shadow-lg shadow-rose-600/20 transition-all uppercase tracking-wider"
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold shadow-lg shadow-rose-600/20 transition-all uppercase tracking-wider disabled:opacity-50"
               >
                 <Power className="w-4 h-4" />
                 <span>STOP MONITORING</span>
@@ -286,48 +571,26 @@ export const PatientMonitoringView: React.FC = () => {
               <button
                 onClick={handleRevokeConsent}
                 disabled={actionLoading}
-                className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
+                className="px-4 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
               >
                 <span>Revoke Consent</span>
               </button>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Optional Custom Monitoring Period Selectors */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-950 rounded-xl border border-slate-800/80">
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400">Custom Start Date/Time (Optional)</label>
-                  <input
-                    type="datetime-local"
-                    value={customStart}
-                    onChange={(e) => setCustomStart(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-slate-400">Custom End Date/Time (Optional)</label>
-                  <input
-                    type="datetime-local"
-                    value={customEnd}
-                    onChange={(e) => setCustomEnd(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-brand-500"
-                  />
-                </div>
-              </div>
-
               {!statusData?.has_active_consent ? (
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
-                    onClick={handleRequestOSPermission}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+                    onClick={() => setShowPermissionModal(true)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
                   >
                     <Navigation className="w-4 h-4 text-brand-400" />
-                    <span>Allow Location Permission</span>
+                    <span>Authorize Location Permission</span>
                   </button>
                   <button
                     onClick={handleGrantConsent}
                     disabled={actionLoading}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-500/20 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-500/20 transition-colors disabled:opacity-50"
                   >
                     <ShieldCheck className="w-4 h-4" />
                     <span>Grant Explicit Consent (14 Days)</span>
@@ -337,7 +600,7 @@ export const PatientMonitoringView: React.FC = () => {
                 <button
                   onClick={handleStartSession}
                   disabled={actionLoading}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-wider"
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold shadow-lg shadow-emerald-500/20 transition-all uppercase tracking-wider disabled:opacity-50"
                 >
                   <Power className="w-4 h-4" />
                   <span>START MONITORING</span>
@@ -348,48 +611,66 @@ export const PatientMonitoringView: React.FC = () => {
         </div>
       </div>
 
-      {/* Observation Telemetry Ingestion Simulator Panel */}
-      <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-3">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2 font-heading font-semibold text-xs text-slate-200">
-            <Radio className="w-4 h-4 text-cyan-400" />
-            <span>Mobile Location Telemetry Ingestion Simulator</span>
+      {/* ========================================================================= */}
+      {/* SEPARATE DEMONSTRATION SIMULATION SECTION (Clearly identified as SIMULATED) */}
+      {/* ========================================================================= */}
+      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+        <button
+          onClick={() => setShowSimulatorSection(!showSimulatorSection)}
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-900/50 transition-colors"
+        >
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+            <Radio className="w-4 h-4 text-indigo-400" />
+            <span>Demonstration Simulator Mode (Classroom / Mock Coordinates Only)</span>
           </div>
-          <span className="text-[10px] font-mono text-slate-500">Android Client Endpoint: /api/v1/monitoring/locations/submit</span>
-        </div>
+          {showSimulatorSection ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-          <div className="space-y-1">
-            <label className="text-[11px] text-slate-400">Simulated Latitude</label>
-            <input
-              type="number"
-              step="0.0001"
-              value={simLat}
-              onChange={(e) => setSimLat(parseFloat(e.target.value))}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-            />
+        {showSimulatorSection && (
+          <div className="p-5 border-t border-slate-800 space-y-4 bg-slate-950/50">
+            <div className="p-3 bg-indigo-950/30 border border-indigo-500/30 rounded-xl text-indigo-200 text-xs flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+              <p className="leading-relaxed">
+                <strong>Demonstration Mode:</strong> Use this panel only for offline academic demonstration when a physical GPS device is not present. 
+                Submissions from this simulator will be explicitly tagged as <strong className="font-mono text-white">source = SIMULATED</strong> in PostgreSQL/PostGIS. 
+                Do not use this panel for real phone live GPS testing.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] text-slate-400">Simulated Latitude</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={simLat}
+                  onChange={(e) => setSimLat(parseFloat(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] text-slate-400">Simulated Longitude</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={simLng}
+                  onChange={(e) => setSimLng(parseFloat(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={handleTestSubmitLocation}
+                  disabled={simLoading}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send Simulated Observation</span>
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-[11px] text-slate-400">Simulated Longitude</label>
-            <input
-              type="number"
-              step="0.0001"
-              value={simLng}
-              onChange={(e) => setSimLng(parseFloat(e.target.value))}
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleTestSubmitLocation}
-              disabled={simLoading}
-              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-medium transition-colors"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Send Location Observation</span>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

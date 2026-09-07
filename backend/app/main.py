@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
+import os
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -58,15 +60,16 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Configure CORS Middleware
-    if settings.BACKEND_CORS_ORIGINS:
-        application.add_middleware(
-            CORSMiddleware,
-            allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    # Configure CORS Middleware (Permit localhost and private LAN RFC 1918 addresses for mobile testing)
+    cors_origins = [str(origin) for origin in settings.BACKEND_CORS_ORIGINS] if settings.BACKEND_CORS_ORIGINS else ["*"]
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_origin_regex=r"^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Register Exception Handlers
     application.add_exception_handler(HealthWatchException, healthwatch_exception_handler)
@@ -86,6 +89,19 @@ def create_application() -> FastAPI:
 
     # Serves /api/v1/*
     application.include_router(api_v1_router, prefix=settings.API_V1_STR)
+
+    @application.get("/download/app", tags=["Mobile App"], summary="Download Native Android APK")
+    @application.get("/download/healthwatch.apk", tags=["Mobile App"], summary="Download Native Android APK")
+    @application.get("/HealthWatch.apk", tags=["Mobile App"], summary="Download Native Android APK")
+    def download_android_apk():
+        apk_path = os.path.join(os.path.dirname(__file__), "HealthWatch.apk")
+        if not os.path.exists(apk_path):
+            raise HTTPException(status_code=404, detail="HealthWatch.apk not found on server")
+        return FileResponse(
+            path=apk_path,
+            media_type="application/vnd.android.package-archive",
+            filename="HealthWatch.apk"
+        )
 
     @application.get("/", tags=["Root"])
     def root():

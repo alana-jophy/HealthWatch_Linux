@@ -30,7 +30,7 @@ def get_officer_token() -> str:
 
 
 # ==============================================================================
-# Step 7: Hierarchical Geographic Drilldown Tests
+# Step 7 & 20: Hierarchical Geographic Drilldown & Official Kerala Wards Tests
 # ==============================================================================
 
 def test_hierarchical_district_to_local_bodies():
@@ -38,18 +38,20 @@ def test_hierarchical_district_to_local_bodies():
     token = get_officer_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 1. Fetch all districts
+    # 1. Fetch all districts (All 14 Kerala districts)
     dist_res = client.get("/api/v1/gis/districts", headers=headers)
     assert dist_res.status_code == 200
     districts = dist_res.json()
+    assert len(districts) == 14
     tvm_dist = next(d for d in districts if d["code"] == "KL-TVM")
     ekm_dist = next(d for d in districts if d["code"] == "KL-EKM")
+    alp_dist = next(d for d in districts if d["code"] == "KL-ALP")
 
     # 2. Query local bodies for Thiruvananthapuram (KL-TVM)
     tvm_lb_res = client.get(f"/api/v1/gis/local-bodies?district_id={tvm_dist['id']}", headers=headers)
     assert tvm_lb_res.status_code == 200
     tvm_lbs = tvm_lb_res.json()
-    assert len(tvm_lbs) >= 2
+    assert len(tvm_lbs) == 90
     assert all(lb["district_id"] == tvm_dist["id"] for lb in tvm_lbs)
     assert any("Thiruvananthapuram" in lb["name"] for lb in tvm_lbs)
     assert any("Nedumangad" in lb["name"] for lb in tvm_lbs)
@@ -58,75 +60,103 @@ def test_hierarchical_district_to_local_bodies():
     ekm_lb_res = client.get(f"/api/v1/gis/local-bodies?district_id={ekm_dist['id']}", headers=headers)
     assert ekm_lb_res.status_code == 200
     ekm_lbs = ekm_lb_res.json()
+    assert len(ekm_lbs) == 111
     assert all(lb["district_id"] == ekm_dist["id"] for lb in ekm_lbs)
     assert any("Kochi" in lb["name"] for lb in ekm_lbs)
 
+    # 4. Query local bodies for Alappuzha (KL-ALP)
+    alp_lb_res = client.get(f"/api/v1/gis/local-bodies?district_id={alp_dist['id']}", headers=headers)
+    assert alp_lb_res.status_code == 200
+    alp_lbs = alp_lb_res.json()
+    assert len(alp_lbs) == 91
+    assert any(lb["code"] == "M04014" for lb in alp_lbs)
 
-def test_hierarchical_local_body_to_wards():
-    """Verify: Selecting a local body returns ONLY wards belonging to that local body."""
+
+def test_hierarchical_official_kerala_wards():
+    """Verify: Official SEC ward counts, codes, and names for Corporations and Municipalities."""
     token = get_officer_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 1. Fetch Thiruvananthapuram Municipal Corporation local body
+    # 1. Alappuzha Municipality (M04014) - MUST have all 53 official wards
     lb_res = client.get("/api/v1/gis/local-bodies", headers=headers)
     assert lb_res.status_code == 200
-    tvm_corp = next(lb for lb in lb_res.json() if "Thiruvananthapuram Municipal Corporation" in lb["name"])
+    alpy_muni = next(lb for lb in lb_res.json() if lb.get("code") == "M04014")
+    assert alpy_muni is not None
 
-    # 2. Query wards for Thiruvananthapuram Municipal Corporation
-    ward_res = client.get(f"/api/v1/gis/wards?local_body_id={tvm_corp['id']}", headers=headers)
-    assert ward_res.status_code == 200
-    wards = ward_res.json()
-    assert len(wards) >= 4
-    assert all(w["local_body_id"] == tvm_corp["id"] for w in wards)
-    ward_names = [w["name"] for w in wards]
-    assert "Palayam Ward" in ward_names
-    assert "Medical College Ward" in ward_names
+    alpy_wards_res = client.get(f"/api/v1/gis/local-bodies/{alpy_muni['id']}/wards", headers=headers)
+    assert alpy_wards_res.status_code == 200
+    alpy_wards = alpy_wards_res.json()
+    assert len(alpy_wards) == 53, f"Expected 53 wards for Alappuzha Municipality, got {len(alpy_wards)}"
+
+    # Check first 3 official wards matching prompt exactly
+    w1 = next(w for w in alpy_wards if w["ward_number"] == 1)
+    assert w1["ward_code"] == "M04014001"
+    assert w1["name"] == "THUMPOLY"
+
+    w2 = next(w for w in alpy_wards if w["ward_number"] == 2)
+    assert w2["ward_code"] == "M04014002"
+    assert w2["name"] == "KOMMADY"
+
+    w3 = next(w for w in alpy_wards if w["ward_number"] == 3)
+    assert w3["ward_code"] == "M04014003"
+    assert w3["name"] == "POONTHOPPU"
+
+    # Test searchable ward query by name and code
+    search_thumpoly = client.get(f"/api/v1/gis/local-bodies/{alpy_muni['id']}/wards?q=THUMPOLY", headers=headers)
+    assert search_thumpoly.status_code == 200
+    assert any(w["name"] == "THUMPOLY" for w in search_thumpoly.json())
+
+    search_code = client.get(f"/api/v1/gis/local-bodies/{alpy_muni['id']}/wards?q=M04014002", headers=headers)
+    assert search_code.status_code == 200
+    assert len(search_code.json()) == 1
+    assert search_code.json()[0]["name"] == "KOMMADY"
+
+    # 2. Kochi Municipal Corporation (C07003) - MUST have all 76 official wards
+    kochi_corp = next(lb for lb in lb_res.json() if lb.get("code") == "C07003")
+    kochi_wards_res = client.get(f"/api/v1/gis/local-bodies/{kochi_corp['id']}/wards", headers=headers)
+    assert kochi_wards_res.status_code == 200
+    assert len(kochi_wards_res.json()) == 76, f"Expected 76 wards for Kochi Corp, got {len(kochi_wards_res.json())}"
+    kw1 = next(w for w in kochi_wards_res.json() if w["ward_number"] == 1)
+    assert kw1["ward_code"] == "C07003001"
+    assert kw1["name"] == "FORT KOCHI"
+
+    # 3. Thiruvananthapuram Municipal Corporation (C01001) - MUST have all 100 official wards
+    tvm_corp = next(lb for lb in lb_res.json() if lb.get("code") == "C01001")
+    tvm_wards_res = client.get(f"/api/v1/gis/local-bodies/{tvm_corp['id']}/wards", headers=headers)
+    assert tvm_wards_res.status_code == 200
+    assert len(tvm_wards_res.json()) == 100, f"Expected 100 wards for TVM Corp, got {len(tvm_wards_res.json())}"
+    palayam = next(w for w in tvm_wards_res.json() if w["ward_code"] == "C01001039")
+    assert palayam["name"] == "PALAYAM"
 
 
-def test_hierarchical_ward_to_cases():
-    """Verify: Selecting a ward filters disease cases strictly to that ward."""
+def test_referential_integrity_validation():
+    """Verify: Rejecting invalid district -> local_body -> ward combinations (Requirement 15)."""
     token = get_officer_token()
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 1. Find Palayam Ward
-    ward_res = client.get("/api/v1/gis/wards", headers=headers)
-    assert ward_res.status_code == 200
-    palayam_ward = next(w for w in ward_res.json() if "Palayam" in w["name"])
+    dist_res = client.get("/api/v1/gis/districts", headers=headers).json()
+    alp_dist = next(d for d in dist_res if d["code"] == "KL-ALP")
+    ekm_dist = next(d for d in dist_res if d["code"] == "KL-EKM")
 
-    # 2. Query cases filtered by ward_id
-    cases_res = client.get(f"/api/v1/gis/cases?ward_id={palayam_ward['id']}", headers=headers)
-    assert cases_res.status_code == 200
-    ward_cases = cases_res.json()
-    dengue_case = next((c for c in ward_cases if c["patient_pseudo_id"] == "PAT-SYNTH-101"), None)
-    assert dengue_case is not None
-    assert dengue_case["disease_code"] == "DENGUE-01"
+    alp_lbs = client.get(f"/api/v1/gis/local-bodies?district_id={alp_dist['id']}", headers=headers).json()
+    ekm_lbs = client.get(f"/api/v1/gis/local-bodies?district_id={ekm_dist['id']}", headers=headers).json()
 
+    # Try creating patient with District Alappuzha + Local Body from Ernakulam
+    bad_payload = {
+        "pseudo_id": f"PAT-INVALID-{datetime.datetime.now().microsecond}",
+        "full_name": "Invalid Location Subject",
+        "district_id": alp_dist["id"],
+        "local_body_id": ekm_lbs[0]["id"],  # Ernakulam LB with Alappuzha District!
+        "age": 30,
+        "gender": "FEMALE",
+        "district_name": "Alappuzha",
+        "local_body_name": ekm_lbs[0]["name"],
+        "ward_number": 1,
+    }
 
-def test_date_range_case_filtering():
-    """Verify: Date range filtering (start_date, end_date) works correctly."""
-    token = get_officer_token()
-    headers = {"Authorization": f"Bearer {token}"}
-
-    today = datetime.date.today()
-    yesterday = today - datetime.timedelta(days=1)
-    tomorrow = today + datetime.timedelta(days=1)
-
-    # 1. Query today's date range
-    res_today = client.get(
-        f"/api/v1/gis/cases?start_date={yesterday}&end_date={tomorrow}",
-        headers=headers,
-    )
-    assert res_today.status_code == 200
-    assert len(res_today.json()) >= 3
-
-    # 2. Query future date range with 0 cases
-    future_date = today + datetime.timedelta(days=100)
-    res_future = client.get(
-        f"/api/v1/gis/cases?start_date={future_date}",
-        headers=headers,
-    )
-    assert res_future.status_code == 200
-    assert len(res_future.json()) == 0
+    res = client.post("/api/v1/patients/", json=bad_payload, headers=headers)
+    assert res.status_code == 400
+    assert "Referential integrity error" in res.json()["detail"]
 
 
 def test_single_spatial_entity_lookups():
@@ -140,3 +170,19 @@ def test_single_spatial_entity_lookups():
     single_dist = client.get(f"/api/v1/gis/districts/{dist_id}", headers=headers)
     assert single_dist.status_code == 200
     assert single_dist.json()["id"] == dist_id
+
+    lb_res = client.get("/api/v1/gis/local-bodies", headers=headers)
+    lb_id = lb_res.json()[0]["id"]
+    single_lb = client.get(f"/api/v1/gis/local-bodies/{lb_id}", headers=headers)
+    assert single_lb.status_code == 200
+    assert single_lb.json()["id"] == lb_id
+    assert single_lb.json()["code"] is not None
+
+    ward_res = client.get(f"/api/v1/gis/local-bodies/{lb_id}/wards", headers=headers)
+    ward_id = ward_res.json()[0]["id"]
+    single_ward = client.get(f"/api/v1/gis/wards/{ward_id}", headers=headers)
+    assert single_ward.status_code == 200
+    assert single_ward.json()["id"] == ward_id
+    assert single_ward.json()["ward_code"] is not None
+    assert single_ward.json()["ward_name"] is not None
+

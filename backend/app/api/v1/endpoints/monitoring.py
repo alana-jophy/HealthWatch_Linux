@@ -192,6 +192,12 @@ def get_monitoring_status(
         .first()
     )
 
+    effective_interval = (
+        (active_session.sampling_interval_minutes if active_session and active_session.sampling_interval_minutes else None)
+        or (latest_session.sampling_interval_minutes if latest_session and latest_session.sampling_interval_minutes else None)
+        or settings.LOCATION_SAMPLING_INTERVAL_MINUTES
+    )
+
     return PatientMonitoringStatusResponse(
         patient_id=patient.id,
         patient_pseudo_id=patient.pseudo_id,
@@ -202,10 +208,10 @@ def get_monitoring_status(
         active_session=active_session,
         latest_session=latest_session,
         can_collect_location=can_collect,
-        sampling_interval_minutes=settings.LOCATION_SAMPLING_INTERVAL_MINUTES,
-        sampling_interval_seconds=settings.LOCATION_SAMPLING_INTERVAL_SECONDS,
-        sampling_interval_description="Approximately 15 minutes",
-        explanation_notice=EXPLANATION_NOTICE,
+        sampling_interval_minutes=effective_interval,
+        sampling_interval_seconds=effective_interval * 60,
+        sampling_interval_description=f"Approximately {effective_interval} minutes",
+        explanation_notice=f"HealthWatch will collect your location approximately every {effective_interval} minutes during the authorized monitoring period.",
     )
 
 
@@ -413,6 +419,8 @@ def start_monitoring_session(
         "stopped_at": now,
     })
 
+    interval_mins = payload.sampling_interval_minutes or settings.LOCATION_SAMPLING_INTERVAL_MINUTES
+
     # Create new active monitoring session
     session = MonitoringSession(
         patient_id=patient.id,
@@ -420,6 +428,7 @@ def start_monitoring_session(
         start_time=start_time,
         end_time=session_end,
         status=SessionStatus.ACTIVE.value,
+        sampling_interval_minutes=interval_mins,
     )
     db.add(session)
     db.flush()
@@ -437,7 +446,7 @@ def start_monitoring_session(
             "consent_id": str(consent.id),
             "start_time": start_time.isoformat(),
             "end_time": session_end.isoformat(),
-            "sampling_interval": f"{settings.LOCATION_SAMPLING_INTERVAL_MINUTES} mins",
+            "sampling_interval": f"{interval_mins} mins",
         },
     )
 
@@ -893,6 +902,13 @@ def get_patient_movement_roadmap(
     # Order strictly chronologically
     observations_raw = query.order_by(PatientLocation.recorded_at.asc()).all()
 
+    # Resolve administrative hierarchy and disease for roadmap
+    res_district = target_patient.district.name if target_patient.district else target_patient.district_name
+    res_local_body = target_patient.local_body.name if target_patient.local_body else target_patient.local_body_name
+    res_ward_name = target_patient.ward.name if target_patient.ward else (f"Ward {target_patient.ward_number}" if target_patient.ward_number else None)
+    res_ward_num = target_patient.ward.ward_number if (target_patient.ward and target_patient.ward.ward_number) else target_patient.ward_number
+    res_disease = target_patient.disease_name or (target_patient.disease.disease_name if target_patient.disease else None)
+
     # 3. Construct Items
     observation_items = []
     for obs in observations_raw:
@@ -906,6 +922,10 @@ def get_patient_movement_roadmap(
                 accuracy=eff_acc,
                 source=obs.source or "PATIENT_GPS",
                 session_id=obs.session_id or obs.monitoring_session_id,
+                district_name=res_district,
+                local_body_name=res_local_body,
+                ward_name=res_ward_name,
+                ward_number=res_ward_num,
             )
         )
 
@@ -946,6 +966,7 @@ def get_patient_movement_roadmap(
         patient_id=target_patient.id,
         patient_pseudo_id=target_patient.pseudo_id,
         patient_name=target_patient.full_name,
+        disease_name=res_disease,
         session_id=session_id,
         filter_date=date,
         start_time=start_time,

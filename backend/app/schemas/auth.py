@@ -22,20 +22,22 @@ class UserRegisterRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    """Schema for user credentials login."""
-    email: EmailStr = Field(..., description="User email address")
+    """Schema for user credentials login (accepts email or account ID)."""
+    email: str = Field(..., description="User email address or patient Account ID")
     password: str = Field(..., description="User password")
 
 
 class UserResponse(BaseModel):
     """Schema representing user profile output."""
     id: uuid.UUID
-    email: EmailStr
+    email: str
     full_name: str
     role: str
     is_active: bool
     is_superuser: bool
     created_at: datetime
+    patient_pseudo_id: Optional[str] = None
+    patient_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
 

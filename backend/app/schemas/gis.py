@@ -41,11 +41,12 @@ class LocalBodyGISResponse(BaseModel):
     """Local Body GIS record."""
     id: uuid.UUID
     district_id: uuid.UUID
+    code: Optional[str] = None
     name: str
     body_type: str
     center_latitude: Optional[float] = None
     center_longitude: Optional[float] = None
-    source: str = "SIMULATED"
+    source: str = "OFFICIAL_SEC"
     geojson: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -55,14 +56,17 @@ class WardGISResponse(BaseModel):
     """Ward GIS record."""
     id: uuid.UUID
     local_body_id: uuid.UUID
+    ward_code: Optional[str] = None
     ward_number: int
     name: str
+    ward_name: Optional[str] = None
     center_latitude: Optional[float] = None
     center_longitude: Optional[float] = None
-    source: str = "SIMULATED"
+    source: str = "OFFICIAL_SEC"
     geojson: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class CaseLocationPoint(BaseModel):

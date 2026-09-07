@@ -136,16 +136,40 @@ export const PatientProfileView: React.FC = () => {
                 <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-brand-400" /> Contact Number
                 </span>
-                <div className="text-sm font-mono font-bold text-white">{profile.contact_number}</div>
+                {profile.has_phone !== false && profile.contact_number ? (
+                  <div className="text-sm font-mono font-bold text-white">{profile.contact_number}</div>
+                ) : (
+                  <div className="text-xs font-medium text-slate-400 italic">No mobile phone registered</div>
+                )}
               </div>
 
               <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
                 <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-brand-400" /> Diagnosed Condition
+                </span>
+                <div className="text-sm font-bold text-emerald-400">
+                  {profile.disease_name || 'Under Clinical Evaluation'}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1 sm:col-span-2">
+                <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
                   <UserCheck className="w-3.5 h-3.5 text-brand-400" /> Assigned Health Worker
                 </span>
                 <div className="text-sm font-bold text-white">
-                  {profile.assigned_worker_name || 'Rajesh Kumar (Field Surveillance Officer)'}
+                  {profile.assigned_worker_name || 'Assigned Field Surveillance Officer'}
                 </div>
+              </div>
+            </div>
+
+            {/* Linked Login Account */}
+            <div className="p-4 rounded-xl bg-brand-950/20 border border-brand-500/30 space-y-1">
+              <span className="text-[11px] font-medium text-brand-400 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" /> Linked Login Account
+              </span>
+              <div className="text-xs font-mono text-white flex flex-wrap items-center justify-between gap-2">
+                <span>Email: {profile.account_email || 'Active Patient Account'}</span>
+                <span className="text-brand-300 font-bold">Account ID: {profile.pseudo_id}</span>
               </div>
             </div>
 
@@ -153,7 +177,7 @@ export const PatientProfileView: React.FC = () => {
             <div className="p-5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
                 <Home className="w-4 h-4 text-brand-400" />
-                <span>Residence & Administrative Boundaries</span>
+                <span>Residence & Kerala Administrative Hierarchy</span>
               </div>
               <div className="text-sm text-slate-200">{profile.address}</div>
               <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-800/80 text-xs">
@@ -166,11 +190,36 @@ export const PatientProfileView: React.FC = () => {
                   <span className="font-semibold text-slate-300">{profile.local_body_name}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-500 block">Ward Number</span>
-                  <span className="font-mono font-semibold text-brand-400">Ward #{profile.ward_number}</span>
+                  <span className="text-[10px] text-slate-500 block">Ward</span>
+                  <span className="font-mono font-semibold text-brand-400">
+                    Ward #{profile.ward_number} {profile.ward_name ? `(${profile.ward_name})` : ''}
+                  </span>
                 </div>
               </div>
             </div>
+
+            {/* Latest GPS Telemetry Observation */}
+            {profile.latest_latitude && profile.latest_longitude && (
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" /> Latest GPS Observation
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Coordinates</span>
+                    <span className="text-white font-bold">{profile.latest_latitude.toFixed(6)}, {profile.latest_longitude.toFixed(6)}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Accuracy</span>
+                    <span className="text-emerald-400 font-bold">±{profile.latest_accuracy || 5}m</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Source</span>
+                    <span className="text-cyan-400 font-bold">{profile.latest_source || 'PATIENT_GPS'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Side Info & Privacy Guarantee */}

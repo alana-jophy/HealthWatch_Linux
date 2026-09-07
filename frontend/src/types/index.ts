@@ -34,6 +34,7 @@ export interface DistrictGIS {
 export interface LocalBodyGIS {
   id: string;
   district_id: string;
+  code?: string;
   name: string;
   body_type: string;
   center_latitude: number;
@@ -45,13 +46,16 @@ export interface LocalBodyGIS {
 export interface WardGIS {
   id: string;
   local_body_id: string;
+  ward_code?: string;
   ward_number: number;
   name: string;
+  ward_name?: string;
   center_latitude: number;
   center_longitude: number;
   source: string;
   geojson?: any;
 }
+
 
 export interface DiseaseGISCase {
   case_id: string;
@@ -128,6 +132,10 @@ export interface RoadmapObservationItem {
   accuracy?: number | null;
   source: 'PATIENT_GPS' | 'HEALTH_WORKER' | 'APPROXIMATE' | 'SIMULATED' | string;
   session_id?: string | null;
+  district_name?: string | null;
+  local_body_name?: string | null;
+  ward_name?: string | null;
+  ward_number?: number | null;
 }
 
 export interface RoadmapPoint {
@@ -148,6 +156,7 @@ export interface PatientRoadmapResponse {
   patient_id: string;
   patient_pseudo_id: string;
   patient_name?: string | null;
+  disease_name?: string | null;
   session_id?: string | null;
   filter_date?: string | null;
   start_time?: string | null;
@@ -172,7 +181,10 @@ export interface PatientProfile {
   full_name: string;
   age: number;
   gender: string;
-  contact_number: string;
+  contact_number?: string | null;
+  has_phone?: boolean;
+  disease_id?: string | null;
+  disease_name?: string | null;
   address: string;
   district_name: string;
   local_body_name: string;
@@ -181,6 +193,19 @@ export interface PatientProfile {
   assigned_worker_id?: string | null;
   assigned_worker_name?: string | null;
   created_at?: string;
+  district_id?: string | null;
+  local_body_id?: string | null;
+  ward_id?: string | null;
+  ward_name?: string | null;
+  ward_code?: string | null;
+  account_email?: string | null;
+  account_id?: string | null;
+  user_id?: string | null;
+  latest_latitude?: number | null;
+  latest_longitude?: number | null;
+  latest_accuracy?: number | null;
+  latest_recorded_at?: string | null;
+  latest_source?: string | null;
 }
 
 export interface PatientDiseaseCase {

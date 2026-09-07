@@ -90,3 +90,5 @@ ai/notebooks/.ipynb_checkpoints/
 *.log
 docker-compose.override.yml
 powershell.cmd
+platform-tools/
+

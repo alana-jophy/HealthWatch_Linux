@@ -38,8 +38,14 @@ def test_gis_districts_list_and_geojson():
     res = client.get("/api/v1/gis/districts", headers=headers)
     assert res.status_code == 200
     districts = res.json()
-    assert len(districts) >= 3
-    assert any(d["name"] == "Thiruvananthapuram" for d in districts)
+    assert len(districts) == 14
+    expected_districts = {
+        "Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kasaragod",
+        "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad",
+        "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad"
+    }
+    actual_districts = {d["name"] for d in districts}
+    assert expected_districts == actual_districts
     assert any(d["code"] == "KL-TVM" for d in districts)
     assert all(d["source"] == "SIMULATED" for d in districts)
 
@@ -48,7 +54,7 @@ def test_gis_districts_list_and_geojson():
     assert res_geojson.status_code == 200
     fc = res_geojson.json()
     assert fc["type"] == "FeatureCollection"
-    assert len(fc["features"]) >= 3
+    assert len(fc["features"]) == 14
     assert fc["features"][0]["geometry"]["type"] in ["Polygon", "MultiPolygon"]
 
 

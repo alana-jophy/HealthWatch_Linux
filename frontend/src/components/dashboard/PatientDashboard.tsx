@@ -62,7 +62,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
         fetchMyDiseaseCases(),
         fetchMonitoringStatus(),
         fetchMyLocationHistory(50, 0),
-        fetchMyRoadmap({ date: '2026-09-05' }),
+        fetchMyRoadmap(),
       ]);
 
       setProfile(profileData);
@@ -189,7 +189,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               <div className="text-xs">
                 <span className="text-slate-500 block text-[10px] font-mono uppercase">Pseudo ID</span>
                 <span className="font-mono font-bold text-slate-200">
-                  {profile ? profile.pseudo_id : 'PAT-SYNTH-101'}
+                  {profile ? profile.pseudo_id : 'PAT-USER-143'}
                 </span>
               </div>
             </div>
@@ -246,7 +246,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <span>Age & Gender</span>
                 </span>
                 <div className="text-sm font-semibold text-slate-200">
-                  {profile ? `${profile.age} Years (${profile.gender})` : '34 Years (MALE)'}
+                  {profile ? `${profile.age} Years (${profile.gender})` : '—'}
                 </div>
               </div>
 
@@ -256,7 +256,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <span>Contact Number</span>
                 </span>
                 <div className="text-sm font-semibold text-slate-200">
-                  {profile?.contact_number || '+1-555-0192'}
+                  {profile?.has_phone === false || !profile?.contact_number ? (
+                    <span className="text-amber-400 font-sans text-xs">No mobile phone registered</span>
+                  ) : (
+                    profile?.contact_number
+                  )}
                 </div>
               </div>
 
@@ -266,7 +270,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <span>Residential Address</span>
                 </span>
                 <div className="text-sm font-semibold text-slate-200">
-                  {profile?.address || '104 Maple Street, Palayam'}
+                  {profile?.address || 'Address not registered'}
                 </div>
               </div>
 
@@ -276,7 +280,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <span>Kerala Administrative Ward</span>
                 </span>
                 <div className="text-xs font-mono text-slate-300">
-                  Ward #{profile?.ward_number ?? 1} &bull; {profile?.local_body_name || 'Thiruvananthapuram Municipal Corporation'} &bull; {profile?.district_name || 'Thiruvananthapuram'}
+                  {profile ? (
+                    `Ward #${profile.ward_number} ${profile.ward_name ? `(${profile.ward_name})` : ''} • ${profile.local_body_name} • ${profile.district_name}`
+                  ) : (
+                    'Loading administrative location...'
+                  )}
                 </div>
               </div>
             </div>
@@ -318,11 +326,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                 <div>
                   <div className="text-[11px] text-slate-400">Diagnosed Condition</div>
                   <div className="text-base font-bold text-white mt-0.5">
-                    {primaryCase?.disease?.name || 'Dengue Fever'}
+                    {primaryCase?.disease?.name || profile?.disease_name || 'Under Surveillance Evaluation'}
                   </div>
                 </div>
                 <span className="px-2.5 py-1 rounded-lg bg-slate-800 font-mono text-xs font-semibold text-brand-400 border border-slate-700">
-                  {primaryCase?.disease?.code || 'DENGUE-01'}
+                  {primaryCase?.disease?.code || (profile?.disease_name ? 'DISEASE' : 'PENDING')}
                 </span>
               </div>
 
@@ -339,7 +347,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <span className="text-xs font-semibold text-slate-200 mt-1 inline-block">
                     {primaryCase?.diagnosis_date ? new Date(primaryCase.diagnosis_date).toLocaleDateString('en-IN', {
                       dateStyle: 'medium',
-                    }) : '2026-09-04'}
+                    }) : (profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'Recent')}
                   </span>
                 </div>
               </div>

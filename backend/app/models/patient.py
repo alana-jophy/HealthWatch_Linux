@@ -32,6 +32,13 @@ class Patient(Base):
     local_body_id = Column(UUID(as_uuid=True), ForeignKey("local_bodies.id", ondelete="SET NULL"), nullable=True)
     ward_id = Column(UUID(as_uuid=True), ForeignKey("wards.id", ondelete="SET NULL"), nullable=True)
 
+    # Mobile phone status
+    has_phone = Column(Boolean, default=True, nullable=False)
+
+    # Primary Disease classification
+    disease_id = Column(UUID(as_uuid=True), ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)
+    disease_name = Column(String(100), nullable=True)
+
     # Assigned Health Worker for field case management & monitoring
     assigned_worker_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
 
@@ -40,6 +47,10 @@ class Patient(Base):
     # Relationships
     user = relationship("User", foreign_keys=[user_id], lazy="selectin")
     assigned_worker = relationship("User", foreign_keys=[assigned_worker_id], lazy="selectin")
+    district = relationship("District", foreign_keys=[district_id], lazy="selectin")
+    local_body = relationship("LocalBody", foreign_keys=[local_body_id], lazy="selectin")
+    ward = relationship("Ward", foreign_keys=[ward_id], lazy="selectin")
+    disease = relationship("Disease", foreign_keys=[disease_id], lazy="selectin")
     disease_cases = relationship("DiseaseCase", back_populates="patient", cascade="all, delete-orphan", lazy="selectin")
     monitoring_sessions = relationship("MonitoringSession", back_populates="patient", cascade="all, delete-orphan", lazy="selectin")
     location_consents = relationship("LocationConsent", back_populates="patient", cascade="all, delete-orphan", lazy="selectin")

@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 
 export const MovementAnalysisView: React.FC = () => {
-  const [selectedPatientId, setSelectedPatientId] = useState<string>('PAT-SYNTH-101');
-  const [inputPseudoId, setInputPseudoId] = useState<string>('PAT-SYNTH-101');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('PAT-USER-143');
+  const [inputPseudoId, setInputPseudoId] = useState<string>('PAT-USER-143');
   const [filterDate, setFilterDate] = useState<string>('');
 
   const handleApplyFilter = (e: React.FormEvent) => {
@@ -24,10 +24,7 @@ export const MovementAnalysisView: React.FC = () => {
   };
 
   const samplePatients = [
-    { pseudo: 'PAT-SYNTH-101', name: 'Synthetic Patient 101 (Palayam Cluster)' },
-    { pseudo: 'PAT-SYNTH-102', name: 'Synthetic Patient 102 (Medical College)' },
-    { pseudo: 'PAT-SYNTH-103', name: 'Synthetic Patient 103 (Marine Drive)' },
-    { pseudo: 'PAT-SYNTH-104', name: 'Synthetic Patient 104 (Pattom)' },
+    { pseudo: 'PAT-USER-143', name: 'Alana P J (Thrissur - Elavally Ward 17)' },
   ];
 
   return (
@@ -67,7 +64,7 @@ export const MovementAnalysisView: React.FC = () => {
                 type="text"
                 value={inputPseudoId}
                 onChange={(e) => setInputPseudoId(e.target.value)}
-                placeholder="Enter Patient Pseudo ID (e.g. PAT-SYNTH-101)..."
+                placeholder="Enter Patient Pseudo ID (e.g. PAT-USER-143)..."
                 className="w-full pl-9 pr-4 py-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors font-mono"
               />
             </div>

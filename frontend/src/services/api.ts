@@ -28,54 +28,76 @@ import {
   UserItem,
 } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+/**
+ * Dynamic API Base URL resolver:
+ * 1. If accessed from a mobile browser or client over LAN (e.g. http://192.168.0.109:5173),
+ *    automatically directs API requests to http://192.168.0.109:8000.
+ * 2. Honors explicit VITE_API_BASE_URL environment variable if set.
+ * 3. Defaults to http://localhost:8000 for standard local development.
+ */
+export const getApiBaseUrl = (): string => {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  if (
+    typeof window !== 'undefined' &&
+    window.location.hostname &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+  return 'http://localhost:8000';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-let cachedOfficerToken: string | null = null;
-let cachedPatientToken: string | null = null;
-
 /**
- * Obtain auth token for surveillance officer
+ * Returns current authenticated JWT bearer token from localStorage
  */
-export const getOfficerAuthHeader = async (): Promise<string> => {
-  if (cachedOfficerToken) return `Bearer ${cachedOfficerToken}`;
-  try {
-    const res = await apiClient.post('/api/auth/login', {
-      email: 'officer.surveillance@healthwatch.org',
-      password: 'Officer@HealthWatch2026',
-    });
-    cachedOfficerToken = res.data.access_token;
-    return `Bearer ${cachedOfficerToken}`;
-  } catch (err) {
-    console.warn('Officer auth token obtain fallback:', err);
-    return '';
-  }
+export const getAuthToken = (): string | null => {
+  return localStorage.getItem('healthwatch_jwt_token');
 };
 
-/**
- * Obtain auth token for patient user (Synthetic Patient 101)
- */
-export const getPatientAuthHeader = async (): Promise<string> => {
-  if (cachedPatientToken) return `Bearer ${cachedPatientToken}`;
-  try {
-    const res = await apiClient.post('/api/auth/login', {
-      email: 'patient.synth101@healthwatch.org',
-      password: 'Patient@HealthWatch2026',
-    });
-    cachedPatientToken = res.data.access_token;
-    return `Bearer ${cachedPatientToken}`;
-  } catch (err) {
-    console.warn('Patient auth token obtain fallback:', err);
-    return '';
-  }
+export const getAuthHeader = (): string => {
+  const token = getAuthToken();
+  return token ? `Bearer ${token}` : '';
 };
+
+// Aliases for unified role-scoped requests using active user's session
+export const getOfficerAuthHeader = async (): Promise<string> => getAuthHeader();
+export const getPatientAuthHeader = async (): Promise<string> => getAuthHeader();
+
+export const getActivePatientEmail = (): string => {
+  const userJson = localStorage.getItem('healthwatch_user_profile');
+  if (userJson) {
+    try {
+      const u = JSON.parse(userJson);
+      if (u.email) return u.email;
+    } catch {}
+  }
+  return 'patient@test.com';
+};
+
+export const setActivePatientAccount = (email: string, password?: string): void => {
+  localStorage.setItem('healthwatch_active_patient_email', email);
+};
+
+apiClient.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
 /**
  * Fetch system telemetry and backend/database health
@@ -114,9 +136,11 @@ export const fetchDistricts = async (): Promise<DistrictGIS[]> => {
 /**
  * Fetch Local Bodies (Corporation, Municipality, Panchayat)
  */
-export const fetchLocalBodies = async (districtId?: string): Promise<LocalBodyGIS[]> => {
+export const fetchLocalBodies = async (districtId?: string, bodyType?: string): Promise<LocalBodyGIS[]> => {
   const auth = await getOfficerAuthHeader();
-  const params = districtId ? { district_id: districtId } : {};
+  const params: Record<string, string> = {};
+  if (districtId) params.district_id = districtId;
+  if (bodyType) params.body_type = bodyType;
   const res = await apiClient.get<LocalBodyGIS[]>('/api/v1/gis/local-bodies', {
     headers: { Authorization: auth },
     params,
@@ -125,17 +149,20 @@ export const fetchLocalBodies = async (districtId?: string): Promise<LocalBodyGI
 };
 
 /**
- * Fetch Wards
+ * Fetch Wards belonging to a local body with optional search filter
  */
-export const fetchWards = async (localBodyId?: string): Promise<WardGIS[]> => {
+export const fetchWards = async (localBodyId?: string, search?: string): Promise<WardGIS[]> => {
   const auth = await getOfficerAuthHeader();
-  const params = localBodyId ? { local_body_id: localBodyId } : {};
+  const params: Record<string, string> = {};
+  if (localBodyId) params.local_body_id = localBodyId;
+  if (search && search.trim()) params.q = search.trim();
   const res = await apiClient.get<WardGIS[]>('/api/v1/gis/wards', {
     headers: { Authorization: auth },
     params,
   });
   return res.data;
 };
+
 
 /**
  * Fetch Disease catalog
@@ -220,7 +247,8 @@ export const revokeLocationConsent = async (consentId?: string): Promise<Locatio
 export const startMonitoringSession = async (
   startTime?: string,
   endTime?: string,
-  durationHours: number = 24
+  durationHours: number = 24,
+  samplingIntervalMinutes?: number
 ): Promise<MonitoringSessionItem> => {
   const auth = await getPatientAuthHeader();
   const res = await apiClient.post<MonitoringSessionItem>(
@@ -229,6 +257,7 @@ export const startMonitoringSession = async (
       start_time: startTime || undefined,
       end_time: endTime || undefined,
       duration_hours: durationHours,
+      sampling_interval_minutes: samplingIntervalMinutes || undefined,
     },
     { headers: { Authorization: auth } }
   );
@@ -255,7 +284,8 @@ export const submitLocationObservation = async (
   sessionId: string,
   latitude: number,
   longitude: number,
-  accuracyMeters: number = 5.0
+  accuracyMeters: number = 5.0,
+  source: string = 'PATIENT_GPS'
 ): Promise<any> => {
   const auth = await getPatientAuthHeader();
   const res = await apiClient.post(
@@ -265,7 +295,8 @@ export const submitLocationObservation = async (
       latitude,
       longitude,
       accuracy_meters: accuracyMeters,
-      is_mock_provider: false,
+      is_mock_provider: source === 'SIMULATED',
+      source,
     },
     { headers: { Authorization: auth } }
   );
@@ -287,7 +318,7 @@ export interface RoadmapFilterParams {
 export const fetchPatientRoadmap = async (
   params?: RoadmapFilterParams
 ): Promise<PatientRoadmapResponse> => {
-  const auth = await getOfficerAuthHeader();
+  const auth = getAuthHeader();
   const queryParams: Record<string, string> = {};
   if (params?.patientId) queryParams.patient_id = params.patientId;
   if (params?.pseudoId) queryParams.pseudo_id = params.pseudoId;
@@ -563,13 +594,25 @@ export const downloadReportFile = async (
 export const fetchPatientsList = async (
   q?: string,
   districtName?: string,
-  wardNumber?: number
+  wardNumber?: number,
+  districtId?: string,
+  localBodyId?: string,
+  wardId?: string,
+  isActive?: boolean,
+  diseaseId?: string,
+  hasPhone?: boolean
 ): Promise<{ total: number; items: PatientProfile[] }> => {
   const auth = await getOfficerAuthHeader();
   const queryParams: Record<string, any> = {};
   if (q) queryParams.q = q;
   if (districtName) queryParams.district_name = districtName;
   if (wardNumber !== undefined) queryParams.ward_number = wardNumber;
+  if (districtId) queryParams.district_id = districtId;
+  if (localBodyId) queryParams.local_body_id = localBodyId;
+  if (wardId) queryParams.ward_id = wardId;
+  if (isActive !== undefined) queryParams.is_active = isActive;
+  if (diseaseId) queryParams.disease_id = diseaseId;
+  if (hasPhone !== undefined) queryParams.has_phone = hasPhone;
 
   const res = await apiClient.get<{ total: number; items: PatientProfile[] }>('/api/v1/patients/', {
     headers: { Authorization: auth },
@@ -587,11 +630,20 @@ export const createPatientRecord = async (
     full_name: string;
     age: number;
     gender: string;
-    contact_number: string;
+    has_phone?: boolean;
+    contact_number?: string | null;
+    disease_id?: string;
+    disease_name?: string;
     address: string;
-    district_name: string;
-    local_body_name: string;
-    ward_number: number;
+    district_name?: string;
+    local_body_name?: string;
+    ward_number?: number;
+    district_id?: string;
+    local_body_id?: string;
+    ward_id?: string;
+    ward_name?: string;
+    email?: string;
+    initial_password?: string;
     user_id?: string;
   }
 ): Promise<PatientProfile> => {
@@ -601,6 +653,53 @@ export const createPatientRecord = async (
   });
   return res.data;
 };
+
+/**
+ * Update an existing patient record
+ */
+export const updatePatientRecord = async (
+  patientId: string,
+  payload: Partial<{
+    full_name: string;
+    age: number;
+    gender: string;
+    has_phone: boolean;
+    contact_number: string | null;
+    disease_id: string | null;
+    disease_name: string | null;
+    address: string;
+    district_name: string;
+    local_body_name: string;
+    ward_number: number;
+    district_id: string;
+    local_body_id: string;
+    ward_id: string;
+    ward_name: string;
+    is_active: boolean;
+    email: string;
+    password: string;
+  }>
+): Promise<PatientProfile> => {
+  const auth = await getOfficerAuthHeader();
+  const res = await apiClient.put<PatientProfile>(`/api/v1/patients/${patientId}`, payload, {
+    headers: { Authorization: auth },
+  });
+  return res.data;
+};
+
+/**
+ * Deactivate / delete a patient record (soft deactivation)
+ */
+export const deletePatientRecord = async (
+  patientId: string
+): Promise<{ status: string; message: string }> => {
+  const auth = await getOfficerAuthHeader();
+  const res = await apiClient.delete<{ status: string; message: string }>(`/api/v1/patients/${patientId}`, {
+    headers: { Authorization: auth },
+  });
+  return res.data;
+};
+
 
 /**
  * Step 19 & 23: Fetch AI Outbreak Risk Predictions

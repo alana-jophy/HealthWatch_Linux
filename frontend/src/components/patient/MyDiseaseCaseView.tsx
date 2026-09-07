@@ -122,7 +122,7 @@ export const MyDiseaseCaseView: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="font-heading text-lg font-bold text-white">
-                      {c.disease?.name || 'Dengue Fever'}
+                      {c.disease?.name || 'Diagnosed Condition'}
                     </h3>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
                       {c.disease?.code || 'DISEASE'}
@@ -134,7 +134,7 @@ export const MyDiseaseCaseView: React.FC = () => {
                     <span>
                       Contagion:{' '}
                       <strong className={c.disease?.contagion_type === 'CONTAGIOUS' ? 'text-amber-400' : 'text-emerald-400'}>
-                        {c.disease?.contagion_type || 'CONTAGIOUS'}
+                        {c.disease?.contagion_type || 'STANDARD'}
                       </strong>
                     </span>
                   </div>
@@ -168,7 +168,9 @@ export const MyDiseaseCaseView: React.FC = () => {
                   </span>
                   <span className="font-semibold text-slate-200 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-brand-400" />
-                    {c.disease?.incubation_period_days || 7} Days
+                    {c.disease?.incubation_period_days !== undefined && c.disease?.incubation_period_days !== null
+                      ? `${c.disease.incubation_period_days} Days`
+                      : 'N/A'}
                   </span>
                 </div>
 
@@ -177,7 +179,9 @@ export const MyDiseaseCaseView: React.FC = () => {
                     Estimated R0 Repro Rate
                   </span>
                   <span className="font-mono font-bold text-brand-400">
-                    {c.disease?.r0_estimate !== undefined ? c.disease.r0_estimate : '1.8'}
+                    {c.disease?.r0_estimate !== undefined && c.disease?.r0_estimate !== null
+                      ? c.disease.r0_estimate
+                      : 'N/A'}
                   </span>
                 </div>
               </div>

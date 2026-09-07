@@ -34,8 +34,9 @@ class LocalBody(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     district_id = Column(UUID(as_uuid=True), ForeignKey("districts.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(50), nullable=True, index=True)  # Official SEC code e.g., M04014, C07003
     name = Column(String(150), nullable=False, index=True)
-    body_type = Column(String(50), default="Corporation", nullable=False)  # Corporation, Municipality, Grama Panchayat
+    body_type = Column(String(50), default="Corporation", nullable=False)  # Corporation, Municipality, Grama Panchayat, Block Panchayat, District Panchayat
 
     center_latitude = Column(Float, nullable=True)
     center_longitude = Column(Float, nullable=True)
@@ -44,11 +45,11 @@ class LocalBody(Base):
     boundary = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=True), nullable=True)
     
     # Provenance tracking
-    source = Column(String(50), default="SIMULATED", nullable=False)
+    source = Column(String(50), default="OFFICIAL_SEC", nullable=False)
 
     # Relationships
     district = relationship("District", back_populates="local_bodies", lazy="selectin")
-    wards = relationship("Ward", back_populates="local_body", cascade="all, delete-orphan", lazy="selectin")
+    wards = relationship("Ward", back_populates="local_body", cascade="all, delete-orphan", lazy="select")
 
 
 class Ward(Base):
@@ -57,6 +58,7 @@ class Ward(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     local_body_id = Column(UUID(as_uuid=True), ForeignKey("local_bodies.id", ondelete="CASCADE"), nullable=False, index=True)
+    ward_code = Column(String(50), nullable=True, index=True)  # Official SEC ward code e.g., M04014001
     ward_number = Column(Integer, nullable=False, index=True)
     name = Column(String(150), nullable=False)
 
@@ -67,7 +69,8 @@ class Ward(Base):
     boundary = Column(Geometry(geometry_type="MULTIPOLYGON", srid=4326, spatial_index=True), nullable=True)
     
     # Provenance tracking
-    source = Column(String(50), default="SIMULATED", nullable=False)
+    source = Column(String(50), default="OFFICIAL_SEC", nullable=False)
 
     # Relationships
     local_body = relationship("LocalBody", back_populates="wards", lazy="selectin")
+

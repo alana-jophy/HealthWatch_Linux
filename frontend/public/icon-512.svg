@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0369a1" />
+      <stop offset="50%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+    <linearGradient id="shield512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e0f2fe" />
+    </linearGradient>
+  </defs>
+  <!-- Rounded Base Background -->
+  <rect width="512" height="512" rx="112" fill="#020617"/>
+  <rect x="20" y="20" width="472" height="472" rx="96" fill="url(#bg512)"/>
+  
+  <!-- Shield Outline -->
+  <path d="M 256 80 C 330 80, 396 102, 408 112 C 408 232, 364 360, 256 428 C 148 360, 104 232, 104 112 C 116 102, 182 80, 256 80 Z" fill="#0c4a6e" opacity="0.6"/>
+  
+  <path d="M 256 98 C 322 98, 380 118, 390 126 C 390 228, 352 342, 256 402 C 160 342, 122 228, 122 126 C 132 118, 190 98, 256 98 Z" fill="url(#shield512)"/>
+  
+  <!-- Cross Symbol -->
+  <path d="M 232 170 L 280 170 L 280 232 L 342 232 L 342 280 L 280 280 L 280 342 L 232 342 L 232 280 L 170 280 L 170 232 L 232 232 Z" fill="#0284c7"/>
+</svg>

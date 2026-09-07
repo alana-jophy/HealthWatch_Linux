@@ -19,8 +19,8 @@ class SessionManager(context: Context) {
         private const val KEY_ACTIVE_SESSION_ID = "active_session_id"
         private const val KEY_BASE_URL = "base_url"
         
-        // Default emulator loopback host, or standard server host
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:8000"
+        // Default LAN server host for physical phone testing
+        const val DEFAULT_BASE_URL = "http://192.168.0.109:8000"
     }
 
     fun saveAuthToken(token: String) {

@@ -155,6 +155,21 @@ def get_district(
     )
 
 
+@router.get(
+    "/districts/{district_id}/local-bodies",
+    response_model=List[LocalBodyGISResponse],
+    summary="List local bodies belonging to a district",
+)
+def list_district_local_bodies(
+    district_id: uuid.UUID,
+    body_type: Optional[str] = Query(None, description="Optional filter by body type (Municipality, Corporation, Grama Panchayat)"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[LocalBodyGISResponse]:
+    """Retrieve all local bodies in specified district."""
+    return list_local_bodies(district_id=district_id, body_type=body_type, db=db, current_user=current_user)
+
+
 # ==============================================================================
 # 2. Local Body Spatial APIs (Kerala Hierarchy Level 2)
 # ==============================================================================
@@ -166,13 +181,15 @@ def get_district(
 )
 def list_local_bodies(
     district_id: Optional[uuid.UUID] = Query(None, description="Filter by parent district ID"),
+    body_type: Optional[str] = Query(None, description="Filter by body type e.g. Municipality, Corporation, Grama Panchayat"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[LocalBodyGISResponse]:
-    """Retrieve local bodies with optional district filtering."""
+    """Retrieve local bodies with optional district and body_type filtering."""
     query = db.query(
         LocalBody.id,
         LocalBody.district_id,
+        LocalBody.code,
         LocalBody.name,
         LocalBody.body_type,
         LocalBody.center_latitude,
@@ -182,6 +199,8 @@ def list_local_bodies(
     )
     if district_id:
         query = query.filter(LocalBody.district_id == district_id)
+    if body_type:
+        query = query.filter(LocalBody.body_type.ilike(f"%{body_type}%"))
 
     local_bodies = query.order_by(LocalBody.name.asc()).all()
 
@@ -192,6 +211,7 @@ def list_local_bodies(
             LocalBodyGISResponse(
                 id=lb.id,
                 district_id=lb.district_id,
+                code=lb.code,
                 name=lb.name,
                 body_type=lb.body_type,
                 center_latitude=lb.center_latitude,
@@ -261,6 +281,7 @@ def get_local_body(
     lb = db.query(
         LocalBody.id,
         LocalBody.district_id,
+        LocalBody.code,
         LocalBody.name,
         LocalBody.body_type,
         LocalBody.center_latitude,
@@ -276,6 +297,7 @@ def get_local_body(
     return LocalBodyGISResponse(
         id=lb.id,
         district_id=lb.district_id,
+        code=lb.code,
         name=lb.name,
         body_type=lb.body_type,
         center_latitude=lb.center_latitude,
@@ -285,6 +307,21 @@ def get_local_body(
     )
 
 
+@router.get(
+    "/local-bodies/{local_body_id}/wards",
+    response_model=List[WardGISResponse],
+    summary="List all official wards belonging to a local body",
+)
+def list_local_body_wards(
+    local_body_id: uuid.UUID,
+    q: Optional[str] = Query(None, description="Optional search filter by ward name, code, or number"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[WardGISResponse]:
+    """Retrieve all official wards for the specified local body."""
+    return list_wards(local_body_id=local_body_id, q=q, db=db, current_user=current_user)
+
+
 # ==============================================================================
 # 3. Ward Spatial APIs (Kerala Hierarchy Level 3)
 # ==============================================================================
@@ -292,17 +329,19 @@ def get_local_body(
 @router.get(
     "/wards",
     response_model=List[WardGISResponse],
-    summary="List electoral/surveillance wards with boundaries filtered by local body",
+    summary="List electoral/surveillance wards filtered by local body with search support",
 )
 def list_wards(
     local_body_id: Optional[uuid.UUID] = Query(None, description="Filter by parent local body ID"),
+    q: Optional[str] = Query(None, description="Search term for ward name, code, or number"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[WardGISResponse]:
-    """Retrieve wards with optional local body filter."""
+    """Retrieve wards with local body filter and optional search query."""
     query = db.query(
         Ward.id,
         Ward.local_body_id,
+        Ward.ward_code,
         Ward.ward_number,
         Ward.name,
         Ward.center_latitude,
@@ -312,6 +351,17 @@ def list_wards(
     )
     if local_body_id:
         query = query.filter(Ward.local_body_id == local_body_id)
+    
+    if q and q.strip():
+        search_term = q.strip()
+        search_filter = Ward.name.ilike(f"%{search_term}%") | Ward.ward_code.ilike(f"%{search_term}%")
+        if search_term.isdigit():
+            search_filter = search_filter | (Ward.ward_number == int(search_term))
+        query = query.filter(search_filter)
+
+    # Protect against uncapped global scans
+    if not local_body_id and not q:
+        query = query.limit(200)
 
     wards = query.order_by(Ward.ward_number.asc()).all()
 
@@ -322,8 +372,10 @@ def list_wards(
             WardGISResponse(
                 id=w.id,
                 local_body_id=w.local_body_id,
+                ward_code=w.ward_code,
                 ward_number=w.ward_number,
                 name=w.name,
+                ward_name=w.name,
                 center_latitude=w.center_latitude,
                 center_longitude=w.center_longitude,
                 source=w.source,
@@ -391,6 +443,7 @@ def get_ward(
     w = db.query(
         Ward.id,
         Ward.local_body_id,
+        Ward.ward_code,
         Ward.ward_number,
         Ward.name,
         Ward.center_latitude,
@@ -406,8 +459,10 @@ def get_ward(
     return WardGISResponse(
         id=w.id,
         local_body_id=w.local_body_id,
+        ward_code=w.ward_code,
         ward_number=w.ward_number,
         name=w.name,
+        ward_name=w.name,
         center_latitude=w.center_latitude,
         center_longitude=w.center_longitude,
         source=w.source,

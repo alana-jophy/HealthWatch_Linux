@@ -89,8 +89,21 @@ def login_user(
     payload: UserLoginRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    """Authenticate user credentials and issue signed JWT token."""
-    user = db.query(User).filter(User.email == payload.email.lower()).first()
+    """Authenticate user credentials (via Email or Patient Account ID) and issue signed JWT token."""
+    from app.models.patient import Patient
+
+    identifier = payload.email.strip()
+    user = db.query(User).filter(User.email == identifier.lower()).first()
+
+    linked_patient = None
+    if not user:
+        # Check if identifier matches a Patient Account ID (pseudo_id)
+        linked_patient = db.query(Patient).filter(Patient.pseudo_id.ilike(identifier)).first()
+        if linked_patient and linked_patient.user_id:
+            user = db.query(User).filter(User.id == linked_patient.user_id).first()
+    else:
+        linked_patient = db.query(Patient).filter(Patient.user_id == user.id).first()
+
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -101,7 +114,7 @@ def login_user(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This account has been deactivated",
+            detail="This account is inactive. Please contact the administrator.",
         )
 
     role_name = user.role.name if user.role else RoleEnum.PATIENT.value
@@ -114,6 +127,8 @@ def login_user(
         extra_claims={
             "email": user.email,
             "full_name": user.full_name,
+            "patient_pseudo_id": linked_patient.pseudo_id if linked_patient else None,
+            "patient_id": str(linked_patient.id) if linked_patient else None,
         },
         expires_delta=access_token_expires,
     )
@@ -128,6 +143,8 @@ def login_user(
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         created_at=user.created_at,
+        patient_pseudo_id=linked_patient.pseudo_id if linked_patient else None,
+        patient_id=linked_patient.id if linked_patient else None,
     )
 
     return TokenResponse(
@@ -147,9 +164,14 @@ def login_user(
 )
 def get_me(
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> UserResponse:
     """Return profile data of the currently authenticated user."""
+    from app.models.patient import Patient
+
     role_name = current_user.role.name if current_user.role else "UNKNOWN"
+    linked_patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -158,6 +180,8 @@ def get_me(
         is_active=current_user.is_active,
         is_superuser=current_user.is_superuser,
         created_at=current_user.created_at,
+        patient_pseudo_id=linked_patient.pseudo_id if linked_patient else None,
+        patient_id=linked_patient.id if linked_patient else None,
     )
 
 

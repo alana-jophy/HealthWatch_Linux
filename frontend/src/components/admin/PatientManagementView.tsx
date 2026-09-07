@@ -1,60 +1,187 @@
 import React, { useState, useEffect } from 'react';
-import { fetchPatientsList, fetchDistricts, createPatientRecord } from '../../services/api';
-import { PatientProfile, DistrictGIS } from '../../types';
+import { 
+  fetchPatientsList, 
+  fetchDistricts, 
+  fetchLocalBodies,
+  fetchWards,
+  fetchDiseases,
+  createPatientRecord,
+  updatePatientRecord,
+  deletePatientRecord
+} from '../../services/api';
+import { PatientProfile, DistrictGIS, LocalBodyGIS, WardGIS, DiseaseItem } from '../../types';
 import {
   Users,
   Search,
-  Filter,
   RefreshCw,
   AlertCircle,
-  UserCheck,
   MapPin,
   CheckCircle2,
-  XCircle,
   Eye,
-  Building,
-  Calendar,
   Plus,
   UserPlus,
-  X
+  X,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  Mail,
+  Lock,
+  Navigation,
+  KeyRound,
+  Activity,
+  Phone,
+  Clock
 } from 'lucide-react';
+import { SearchableSelect } from '../common/SearchableSelect';
 
 export const PatientManagementView: React.FC = () => {
   const [patients, setPatients] = useState<PatientProfile[]>([]);
   const [total, setTotal] = useState<number>(0);
   const [districts, setDistricts] = useState<DistrictGIS[]>([]);
+  const [diseases, setDiseases] = useState<DiseaseItem[]>([]);
+  
+  // Toolbar filter states
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedDistrict, setSelectedDistrict] = useState<string>('');
+  const [filterDistrictId, setFilterDistrictId] = useState<string>('');
+  const [filterLocalBodies, setFilterLocalBodies] = useState<LocalBodyGIS[]>([]);
+  const [filterLocalBodyId, setFilterLocalBodyId] = useState<string>('');
+  const [filterWards, setFilterWards] = useState<WardGIS[]>([]);
+  const [filterWardId, setFilterWardId] = useState<string>('');
+  const [filterDiseaseId, setFilterDiseaseId] = useState<string>('');
+  const [filterHasPhone, setFilterHasPhone] = useState<string>('ALL');
+  const [selectedGender, setSelectedGender] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [samplingInterval, setSamplingInterval] = useState<number>(15);
+  
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Modals state
   const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
-  const [addLoading, setAddLoading] = useState<boolean>(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [addSuccess, setAddSuccess] = useState<string | null>(null);
+  const [editingPatient, setEditingPatient] = useState<PatientProfile | null>(null);
+  const [deletingPatient, setDeletingPatient] = useState<PatientProfile | null>(null);
 
+  // Action states
+  const [actionLoading, setActionLoading] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Form states for Add Modal
+  const [addLocalBodies, setAddLocalBodies] = useState<LocalBodyGIS[]>([]);
+  const [addWards, setAddWards] = useState<WardGIS[]>([]);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    pseudo_id: `PAT-USER-${Math.floor(100 + Math.random() * 900)}`,
+    pseudo_id: '',
     full_name: '',
-    age: 28,
-    gender: 'FEMALE',
-    contact_number: '+91-98470-',
-    address: 'Kerala Residency, Ward 1',
-    district_name: 'Thiruvananthapuram',
-    local_body_name: 'Thiruvananthapuram Municipal Corporation',
-    ward_number: 1,
+    email: '',
+    initial_password: '',
+    age: '' as number | '',
+    gender: '',
+    has_phone: true,
+    contact_number: '',
+    disease_id: '',
+    disease_name: '',
+    address: '',
+    district_id: '',
+    district_name: '',
+    local_body_id: '',
+    local_body_name: '',
+    ward_id: '',
+    ward_name: '',
+    ward_number: 0,
   });
 
+  // Form states for Edit Modal
+  const [editLocalBodies, setEditLocalBodies] = useState<LocalBodyGIS[]>([]);
+  const [editWards, setEditWards] = useState<WardGIS[]>([]);
+  const [editPhoneError, setEditPhoneError] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    full_name: '',
+    email: '',
+    password: '',
+    age: 28,
+    gender: 'FEMALE',
+    has_phone: true,
+    contact_number: '',
+    disease_id: '',
+    disease_name: '',
+    address: '',
+    district_id: '',
+    district_name: '',
+    local_body_id: '',
+    local_body_name: '',
+    ward_id: '',
+    ward_name: '',
+    ward_number: 1,
+    is_active: true,
+  });
+
+  // Initial load of Kerala Districts and Diseases
+  useEffect(() => {
+    fetchDistricts()
+      .then((res) => setDistricts(res))
+      .catch((err) => console.error('Failed to load districts:', err));
+
+    fetchDiseases()
+      .then((res) => setDiseases(res))
+      .catch((err) => console.error('Failed to load diseases:', err));
+  }, []);
+
+  // Update filter local bodies when filter district changes
+  useEffect(() => {
+    if (filterDistrictId) {
+      fetchLocalBodies(filterDistrictId)
+        .then((lbs) => setFilterLocalBodies(lbs))
+        .catch(() => setFilterLocalBodies([]));
+      setFilterLocalBodyId('');
+      setFilterWards([]);
+      setFilterWardId('');
+    } else {
+      setFilterLocalBodies([]);
+      setFilterLocalBodyId('');
+      setFilterWards([]);
+      setFilterWardId('');
+    }
+  }, [filterDistrictId]);
+
+  // Update filter wards when filter local body changes
+  useEffect(() => {
+    if (filterLocalBodyId) {
+      fetchWards(filterLocalBodyId)
+        .then((w) => setFilterWards(w))
+        .catch(() => setFilterWards([]));
+      setFilterWardId('');
+    } else {
+      setFilterWards([]);
+      setFilterWardId('');
+    }
+  }, [filterLocalBodyId]);
+
+  // Load patients list with all active filters
   const loadData = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [distRes, patRes] = await Promise.all([
-        fetchDistricts().catch(() => []),
-        fetchPatientsList(searchQuery, selectedDistrict || undefined),
-      ]);
-      setDistricts(distRes);
+      let isActiveParam: boolean | undefined = undefined;
+      if (selectedStatus === 'ACTIVE') isActiveParam = true;
+      if (selectedStatus === 'INACTIVE') isActiveParam = false;
+
+      let hasPhoneParam: boolean | undefined = undefined;
+      if (filterHasPhone === 'YES') hasPhoneParam = true;
+      if (filterHasPhone === 'NO') hasPhoneParam = false;
+
+      const patRes = await fetchPatientsList(
+        searchQuery || undefined,
+        undefined,
+        undefined,
+        filterDistrictId || undefined,
+        filterLocalBodyId || undefined,
+        filterWardId || undefined,
+        isActiveParam,
+        filterDiseaseId || undefined,
+        hasPhoneParam
+      );
       setPatients(patRes.items);
       setTotal(patRes.total);
     } catch (err: any) {
@@ -66,49 +193,428 @@ export const PatientManagementView: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [selectedDistrict]);
+  }, [filterDistrictId, filterLocalBodyId, filterWardId, selectedStatus, filterDiseaseId, filterHasPhone]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     loadData();
   };
 
+  // -------------------------------------------------------------
+  // Add Patient Modal Handlers & Cascading Dropdowns
+  // -------------------------------------------------------------
+  const handleOpenAddModal = async () => {
+    setAddLocalBodies([]);
+    setAddWards([]);
+    setPhoneError(null);
+    setFormData({
+      pseudo_id: '',
+      full_name: '',
+      email: '',
+      initial_password: '',
+      age: '' as number | '',
+      gender: '',
+      has_phone: true,
+      contact_number: '',
+      disease_id: '',
+      disease_name: '',
+      address: '',
+      district_id: '',
+      district_name: '',
+      local_body_id: '',
+      local_body_name: '',
+      ward_id: '',
+      ward_name: '',
+      ward_number: 0,
+    });
+
+    setActionError(null);
+    setActionSuccess(null);
+    setShowAddModal(true);
+  };
+
+  const handleAddDistrictChange = async (distId: string) => {
+    const dist = districts.find((d) => d.id === distId);
+    let lbs: LocalBodyGIS[] = [];
+    if (distId) {
+      try {
+        lbs = await fetchLocalBodies(distId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setAddLocalBodies(lbs);
+    setAddWards([]);
+
+    setFormData((prev) => ({
+      ...prev,
+      district_id: distId,
+      district_name: dist ? dist.name : '',
+      local_body_id: '',
+      local_body_name: '',
+      ward_id: '',
+      ward_name: '',
+      ward_number: 0,
+    }));
+  };
+
+  const handleAddLocalBodyChange = async (lbId: string) => {
+    const lb = addLocalBodies.find((l) => l.id === lbId);
+    let wrds: WardGIS[] = [];
+    if (lbId) {
+      try {
+        wrds = await fetchWards(lbId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setAddWards(wrds);
+
+    setFormData((prev) => ({
+      ...prev,
+      local_body_id: lbId,
+      local_body_name: lb ? lb.name : '',
+      ward_id: '',
+      ward_name: '',
+      ward_number: 0,
+    }));
+  };
+
+  const handleAddWardChange = (wId: string) => {
+    const w = addWards.find((item) => item.id === wId);
+    setFormData((prev) => ({
+      ...prev,
+      ward_id: wId,
+      ward_name: w ? w.name : '',
+      ward_number: w ? w.ward_number : 0,
+    }));
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only accept numeric digits, maximum 10 digits
+    const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setFormData((prev) => ({ ...prev, contact_number: numericOnly }));
+
+    if (numericOnly.length > 0 && numericOnly.length < 10) {
+      setPhoneError(`Phone number must be exactly 10 digits (${numericOnly.length}/10 entered)`);
+    } else {
+      setPhoneError(null);
+    }
+  };
+
+  const handlePhoneBlur = () => {
+    if (formData.has_phone && formData.contact_number && formData.contact_number.length !== 10) {
+      setPhoneError('Phone number must be exactly 10 digits.');
+    }
+  };
+
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAddLoading(true);
-    setAddError(null);
-    setAddSuccess(null);
+
+    if (!formData.pseudo_id.trim()) {
+      setActionError('Account / Pseudo ID is required.');
+      return;
+    }
+    if (!formData.full_name.trim()) {
+      setActionError('Full Name is required.');
+      return;
+    }
+    if (!formData.email.trim()) {
+      setActionError('Login Email is required.');
+      return;
+    }
+    if (!formData.initial_password) {
+      setActionError('Initial Password is required.');
+      return;
+    }
+    if (!formData.age || Number(formData.age) <= 0) {
+      setActionError('Please enter a valid age.');
+      return;
+    }
+    if (!formData.gender) {
+      setActionError('Please select a gender.');
+      return;
+    }
+    if (!formData.disease_id) {
+      setActionError('Please select a disease condition.');
+      return;
+    }
+    if (formData.has_phone) {
+      if (!formData.contact_number || !/^\d{10}$/.test(formData.contact_number.trim())) {
+        setPhoneError('Phone number must be exactly 10 digits.');
+        setActionError('Phone number must be exactly 10 numeric digits.');
+        return;
+      }
+    }
+    if (!formData.address.trim()) {
+      setActionError('Residential Address is required.');
+      return;
+    }
+    if (!formData.district_id) {
+      setActionError('Please select a District.');
+      return;
+    }
+    if (!formData.local_body_id) {
+      setActionError('Please select a Local Body.');
+      return;
+    }
+    if (!formData.ward_id) {
+      setActionError('Please select a Ward.');
+      return;
+    }
+
+    setActionLoading(true);
+    setActionError(null);
+    setActionSuccess(null);
     try {
       const newPatient = await createPatientRecord({
         pseudo_id: formData.pseudo_id.trim(),
         full_name: formData.full_name.trim(),
+        email: formData.email.trim(),
+        initial_password: formData.initial_password,
         age: Number(formData.age),
         gender: formData.gender,
-        contact_number: formData.contact_number.trim(),
+        has_phone: formData.has_phone,
+        contact_number: formData.has_phone ? formData.contact_number.trim() : null,
+        disease_id: formData.disease_id || undefined,
+        disease_name: formData.disease_name || undefined,
         address: formData.address.trim(),
+        district_id: formData.district_id || undefined,
         district_name: formData.district_name,
+        local_body_id: formData.local_body_id || undefined,
         local_body_name: formData.local_body_name,
+        ward_id: formData.ward_id || undefined,
+        ward_name: formData.ward_name,
         ward_number: Number(formData.ward_number),
       });
 
-      setAddSuccess(`Patient record ${newPatient.pseudo_id} (${newPatient.full_name}) registered successfully!`);
-      // Reset form ID for next entry
-      setFormData((prev) => ({
-        ...prev,
-        pseudo_id: `PAT-USER-${Math.floor(100 + Math.random() * 900)}`,
-        full_name: '',
-      }));
+      setActionSuccess(`Patient ${newPatient.pseudo_id} (${newPatient.full_name}) registered with linked login account!`);
       await loadData();
       setTimeout(() => {
         setShowAddModal(false);
-        setAddSuccess(null);
+        setActionSuccess(null);
       }, 1500);
     } catch (err: any) {
-      setAddError(err?.response?.data?.detail || 'Failed to register patient record. Please verify fields.');
+      setActionError(err?.response?.data?.detail || 'Failed to register patient record. Please verify fields.');
     } finally {
-      setAddLoading(false);
+      setActionLoading(false);
     }
   };
+
+  // -------------------------------------------------------------
+  // Edit Patient Modal Handlers & Cascading Dropdowns
+  // -------------------------------------------------------------
+  const handleOpenEdit = async (p: PatientProfile) => {
+    setEditingPatient(p);
+    setActionError(null);
+    setActionSuccess(null);
+    setEditPhoneError(null);
+
+    let lbs: LocalBodyGIS[] = [];
+    let wrds: WardGIS[] = [];
+
+    const distId = p.district_id || (districts.find((d) => d.name === p.district_name)?.id || '');
+    if (distId) {
+      try {
+        lbs = await fetchLocalBodies(distId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    const lbId = p.local_body_id || (lbs.find((l) => l.name === p.local_body_name)?.id || '');
+    if (lbId) {
+      try {
+        wrds = await fetchWards(lbId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    setEditLocalBodies(lbs);
+    setEditWards(wrds);
+
+    setEditFormData({
+      full_name: p.full_name,
+      email: p.account_email || '',
+      password: '',
+      age: p.age,
+      gender: p.gender,
+      has_phone: p.has_phone ?? Boolean(p.contact_number),
+      contact_number: p.contact_number || '',
+      disease_id: p.disease_id || '',
+      disease_name: p.disease_name || '',
+      address: p.address || '',
+      district_id: distId,
+      district_name: p.district_name,
+      local_body_id: lbId,
+      local_body_name: p.local_body_name,
+      ward_id: p.ward_id || '',
+      ward_name: p.ward_name || '',
+      ward_number: p.ward_number,
+      is_active: p.is_active,
+    });
+  };
+
+  const handleEditDistrictChange = async (distId: string) => {
+    const dist = districts.find((d) => d.id === distId);
+    let lbs: LocalBodyGIS[] = [];
+    let wrds: WardGIS[] = [];
+    if (distId) {
+      try {
+        lbs = await fetchLocalBodies(distId);
+        if (lbs.length > 0) {
+          wrds = await fetchWards(lbs[0].id);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setEditLocalBodies(lbs);
+    setEditWards(wrds);
+
+    const firstLb = lbs[0] || null;
+    const firstW = wrds[0] || null;
+
+    setEditFormData((prev) => ({
+      ...prev,
+      district_id: distId,
+      district_name: dist ? dist.name : '',
+      local_body_id: firstLb ? firstLb.id : '',
+      local_body_name: firstLb ? firstLb.name : '',
+      ward_id: firstW ? firstW.id : '',
+      ward_name: firstW ? firstW.name : '',
+      ward_number: firstW ? firstW.ward_number : 1,
+    }));
+  };
+
+  const handleEditLocalBodyChange = async (lbId: string) => {
+    const lb = editLocalBodies.find((l) => l.id === lbId);
+    let wrds: WardGIS[] = [];
+    if (lbId) {
+      try {
+        wrds = await fetchWards(lbId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    setEditWards(wrds);
+    const firstW = wrds[0] || null;
+
+    setEditFormData((prev) => ({
+      ...prev,
+      local_body_id: lbId,
+      local_body_name: lb ? lb.name : '',
+      ward_id: firstW ? firstW.id : '',
+      ward_name: firstW ? firstW.name : '',
+      ward_number: firstW ? firstW.ward_number : 1,
+    }));
+  };
+
+  const handleEditWardChange = (wId: string) => {
+    const w = editWards.find((item) => item.id === wId);
+    setEditFormData((prev) => ({
+      ...prev,
+      ward_id: wId,
+      ward_name: w ? w.name : '',
+      ward_number: w ? w.ward_number : prev.ward_number,
+    }));
+  };
+
+  const handleEditPhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setEditFormData((prev) => ({ ...prev, contact_number: numericOnly }));
+
+    if (numericOnly.length > 0 && numericOnly.length < 10) {
+      setEditPhoneError(`Phone number must be exactly 10 digits (${numericOnly.length}/10 entered)`);
+    } else {
+      setEditPhoneError(null);
+    }
+  };
+
+  const handleUpdatePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPatient) return;
+
+    if (editFormData.has_phone && editFormData.contact_number) {
+      if (!/^\d{10}$/.test(editFormData.contact_number.trim())) {
+        setEditPhoneError('Phone number must be exactly 10 digits.');
+        setActionError('Phone number must be exactly 10 numeric digits.');
+        return;
+      }
+    }
+
+    setActionLoading(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const updatePayload: any = {
+        full_name: editFormData.full_name.trim(),
+        age: Number(editFormData.age),
+        gender: editFormData.gender,
+        has_phone: editFormData.has_phone,
+        contact_number: editFormData.has_phone ? (editFormData.contact_number ? editFormData.contact_number.trim() : null) : null,
+        disease_id: editFormData.disease_id || null,
+        disease_name: editFormData.disease_name || null,
+        address: editFormData.address.trim(),
+        district_id: editFormData.district_id || undefined,
+        district_name: editFormData.district_name,
+        local_body_id: editFormData.local_body_id || undefined,
+        local_body_name: editFormData.local_body_name,
+        ward_id: editFormData.ward_id || undefined,
+        ward_name: editFormData.ward_name,
+        ward_number: Number(editFormData.ward_number),
+        is_active: editFormData.is_active,
+      };
+
+      if (editFormData.email.trim()) {
+        updatePayload.email = editFormData.email.trim();
+      }
+      if (editFormData.password.trim()) {
+        updatePayload.password = editFormData.password.trim();
+      }
+
+      await updatePatientRecord(editingPatient.id, updatePayload);
+
+      setActionSuccess(`Patient record ${editingPatient.pseudo_id} updated successfully.`);
+      await loadData();
+      setTimeout(() => {
+        setEditingPatient(null);
+        setActionSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      setActionError(err?.response?.data?.detail || 'Failed to update patient record.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingPatient) return;
+    setActionLoading(true);
+    setActionError(null);
+
+    try {
+      await deletePatientRecord(deletingPatient.id);
+      setActionSuccess(`Patient ${deletingPatient.pseudo_id} and login access deactivated.`);
+      await loadData();
+      setTimeout(() => {
+        setDeletingPatient(null);
+        setActionSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      setActionError(err?.response?.data?.detail || 'Failed to deactivate patient record.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Local filtering for gender
+  const filteredPatients = patients.filter((p) => {
+    if (selectedGender && p.gender !== selectedGender) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -119,135 +625,253 @@ export const PatientManagementView: React.FC = () => {
             <Users className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-heading text-xl font-bold text-white">Patient Management Registry</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-brand-500/15 text-brand-400 border border-brand-500/30">
-                {total} Records
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Public health surveillance patient directory, demographic records, and field worker assignments
+            <h2 className="text-xl font-bold text-white tracking-tight">Patient Registry & Accounts</h2>
+            <p className="text-xs text-slate-400 font-mono">
+              Role Isolation &bull; Individual Patient Credentials &bull; Kerala Administrative Hierarchy &bull; Total: <span className="text-brand-400 font-bold">{total}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-md transition-colors"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add Patient Record</span>
-          </button>
-
+        <div className="flex items-center gap-2">
           <button
             onClick={loadData}
             disabled={isLoading}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors disabled:opacity-50"
+            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+            title="Refresh list"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-brand-400 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs shadow-lg shadow-brand-600/20 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Patient & Account</span>
           </button>
         </div>
       </div>
 
-      {/* Filter and Search Toolbar */}
-      <div className="glass-panel p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-        <form onSubmit={handleSearchSubmit} className="flex-1 w-full flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* Global Alerts */}
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-3">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Cascading Filter and Search Bar */}
+      <div className="glass-panel p-4 rounded-2xl flex flex-col gap-3">
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+          <form onSubmit={handleSearchSubmit} className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
+              placeholder="Search by name, pseudo ID, or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by Pseudo ID, patient name, address..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition-colors"
+              className="w-full pl-9 pr-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 font-mono"
             />
-          </div>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors shrink-0"
-          >
-            Search
-          </button>
-        </form>
+          </form>
 
-        <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <Filter className="w-3.5 h-3.5 text-brand-400" />
-            <span>District:</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* District Filter (14 Kerala Districts) */}
+            <select
+              value={filterDistrictId}
+              onChange={(e) => setFilterDistrictId(e.target.value)}
+              className="px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-brand-500"
+            >
+              <option value="">All Kerala Districts (14)</option>
+              {districts.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Local Body Filter (Cascading) */}
+            <select
+              value={filterLocalBodyId}
+              onChange={(e) => setFilterLocalBodyId(e.target.value)}
+              disabled={!filterDistrictId || filterLocalBodies.length === 0}
+              className="px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-brand-500 disabled:opacity-50"
+            >
+              <option value="">All Local Bodies</option>
+              {filterLocalBodies.map((lb) => (
+                <option key={lb.id} value={lb.id}>
+                  {lb.name} ({lb.body_type})
+                </option>
+              ))}
+            </select>
+
+            {/* Ward Filter (Cascading & Searchable) */}
+            <div className="w-56">
+              <SearchableSelect
+                id="patient-filter-ward-select"
+                value={filterWardId}
+                onChange={(val) => setFilterWardId(val)}
+                options={filterWards.map((w) => ({
+                  value: w.id,
+                  label: `Ward #${w.ward_number} - ${w.name}`,
+                  code: w.ward_code,
+                  number: w.ward_number,
+                  sublabel: w.ward_code ? `Code: ${w.ward_code}` : undefined,
+                }))}
+                placeholder="All Wards (Search...)"
+                disabled={!filterLocalBodyId || filterWards.length === 0}
+                disabledPlaceholder={!filterLocalBodyId ? "Select Local Body first" : "No wards found"}
+              />
+            </div>
+
+            {/* Disease Filter */}
+            <select
+              value={filterDiseaseId}
+              onChange={(e) => setFilterDiseaseId(e.target.value)}
+              className="px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-brand-500"
+            >
+              <option value="">All Diseases ({diseases.length})</option>
+              {diseases.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.code})
+                </option>
+              ))}
+            </select>
+
+            {/* Phone Availability Filter */}
+            <select
+              value={filterHasPhone}
+              onChange={(e) => setFilterHasPhone(e.target.value)}
+              className="px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-brand-500"
+            >
+              <option value="ALL">All Phone Statuses</option>
+              <option value="YES">Has Mobile Phone</option>
+              <option value="NO">No Mobile Phone</option>
+            </select>
+
+            {/* Status Filter */}
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-brand-500"
+            >
+              <option value="">All Statuses</option>
+              <option value="ACTIVE">Active Surveillance</option>
+              <option value="INACTIVE">Deactivated</option>
+            </select>
+
+            {/* Gender Filter */}
+            <select
+              value={selectedGender}
+              onChange={(e) => setSelectedGender(e.target.value)}
+              className="px-3 py-2 bg-slate-900/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-brand-500"
+            >
+              <option value="">All Genders</option>
+              <option value="FEMALE">Female</option>
+              <option value="MALE">Male</option>
+              <option value="OTHER">Other</option>
+            </select>
+
+            {(searchQuery || filterDistrictId || filterLocalBodyId || filterWardId || filterDiseaseId || filterHasPhone !== 'ALL' || selectedGender || selectedStatus) && (
+              <button
+                onClick={() => {
+                  setSearchQuery('');
+                  setFilterDistrictId('');
+                  setFilterLocalBodyId('');
+                  setFilterWardId('');
+                  setFilterDiseaseId('');
+                  setFilterHasPhone('ALL');
+                  setSelectedGender('');
+                  setSelectedStatus('');
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-slate-300 border border-slate-700 cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
           </div>
-          <select
-            value={selectedDistrict}
-            onChange={(e) => setSelectedDistrict(e.target.value)}
-            className="bg-slate-900/80 border border-slate-800 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-brand-500 transition-colors"
-          >
-            <option value="">All Districts in Kerala</option>
-            {districts.map((d) => (
-              <option key={d.id} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
-      {/* State Handlers */}
+      {/* Patient Table */}
       {isLoading ? (
-        <div className="glass-panel p-12 rounded-2xl text-center space-y-3">
-          <RefreshCw className="w-8 h-8 text-brand-400 animate-spin mx-auto" />
-          <p className="text-sm font-medium text-slate-300">Loading patient registry records...</p>
+        <div className="glass-panel p-12 rounded-2xl flex flex-col items-center justify-center gap-3 text-slate-400">
+          <RefreshCw className="w-6 h-6 animate-spin text-brand-400" />
+          <span className="text-xs font-mono">Loading patient directory...</span>
         </div>
-      ) : error ? (
-        <div className="glass-panel p-8 rounded-2xl border-rose-500/30 bg-rose-950/10 text-center space-y-3">
-          <AlertCircle className="w-8 h-8 text-rose-400 mx-auto" />
-          <h3 className="text-base font-semibold text-rose-300">Failed to Load Patients</h3>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">{error}</p>
-          <button
-            onClick={loadData}
-            className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold"
-          >
-            Retry
-          </button>
-        </div>
-      ) : patients.length === 0 ? (
-        <div className="glass-panel p-12 rounded-2xl text-center space-y-3">
-          <Users className="w-10 h-10 text-slate-600 mx-auto" />
-          <h3 className="text-base font-bold text-white">No Patient Records Found</h3>
-          <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            No patient records matched your filter or search criteria.
-          </p>
+      ) : filteredPatients.length === 0 ? (
+        <div className="glass-panel p-12 rounded-2xl text-center space-y-2">
+          <Users className="w-8 h-8 text-slate-500 mx-auto" />
+          <p className="text-sm font-semibold text-slate-300">No patient records found.</p>
+          <p className="text-xs text-slate-500">Try adjusting your filters or register a new patient account.</p>
         </div>
       ) : (
-        <div className="glass-panel rounded-2xl overflow-hidden">
+        <div className="glass-panel rounded-2xl overflow-hidden border border-slate-800">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-900/80 border-b border-slate-800 text-slate-400 font-mono uppercase text-[10px]">
+            <table className="w-full text-left text-xs font-mono">
+              <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
                 <tr>
-                  <th className="py-3.5 px-4">Pseudo ID</th>
-                  <th className="py-3.5 px-4">Patient Name</th>
-                  <th className="py-3.5 px-4">Age / Gender</th>
+                  <th className="py-3.5 px-4">Account / Pseudo ID</th>
+                  <th className="py-3.5 px-4">Full Name & Phone</th>
+                  <th className="py-3.5 px-4">Diagnosed Condition</th>
+                  <th className="py-3.5 px-4">Login Email</th>
                   <th className="py-3.5 px-4">District</th>
                   <th className="py-3.5 px-4">Local Body / Ward</th>
-                  <th className="py-3.5 px-4">Assigned Worker</th>
+                  <th className="py-3.5 px-4">Latest GPS</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono text-slate-300">
-                {patients.map((p) => (
+              <tbody className="divide-y divide-slate-800/60">
+                {filteredPatients.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-4 font-bold text-brand-400">{p.pseudo_id}</td>
-                    <td className="py-3.5 px-4 text-white font-semibold">{p.full_name}</td>
-                    <td className="py-3.5 px-4 text-slate-300">
-                      {p.age} YRS &bull; {p.gender}
+                    <td className="py-3.5 px-4 text-white font-semibold">
+                      <div>{p.full_name}</div>
+                      <div className="text-[10px] text-slate-400 font-sans flex items-center gap-1.5 mt-0.5">
+                        <span>{p.age} YRS &bull; {p.gender}</span>
+                        <span>&bull;</span>
+                        {p.has_phone === false || !p.contact_number ? (
+                          <span className="px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[9px] font-mono">
+                            NO PHONE
+                          </span>
+                        ) : (
+                          <span className="font-mono text-slate-300 text-[10px] flex items-center gap-0.5">
+                            <Phone className="w-2.5 h-2.5 text-slate-500" />
+                            {p.contact_number}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                        {p.disease_name || 'Under Evaluation'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-300 font-mono text-[11px]">
+                      {p.account_email || 'Linked User Account'}
                     </td>
                     <td className="py-3.5 px-4 text-slate-300">{p.district_name}</td>
                     <td className="py-3.5 px-4 text-slate-400 font-sans text-[11px]">
-                      {p.local_body_name} (Ward #{p.ward_number})
+                      <div>{p.local_body_name}</div>
+                      <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1 flex-wrap">
+                        <span>Ward #{p.ward_number} {p.ward_name ? `(${p.ward_name})` : ''}</span>
+                        {p.ward_code && (
+                          <span className="px-1 py-0.2 rounded bg-indigo-950/70 text-indigo-400 border border-indigo-800/40 text-[9px]">
+                            {p.ward_code}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-300 font-sans text-[11px]">
-                      {p.assigned_worker_name || 'Rajesh Kumar'}
+                    <td className="py-3.5 px-4 font-mono text-[10px]">
+                      {p.has_phone === false ? (
+                        <span className="text-slate-600 italic">No phone (GPS inactive)</span>
+                      ) : p.latest_latitude && p.latest_longitude ? (
+                        <div className="text-emerald-400 flex items-center gap-1">
+                          <Navigation className="w-3 h-3 shrink-0" />
+                          <span>{p.latest_latitude.toFixed(4)}, {p.latest_longitude.toFixed(4)}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-600 italic">No GPS yet</span>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       {p.is_active ? (
@@ -261,12 +885,34 @@ export const PatientManagementView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        onClick={() => setSelectedPatient(p)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-brand-400 text-[11px] font-semibold border border-slate-700 transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={() => setSelectedPatient(p)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-brand-400 border border-slate-700 transition-colors"
+                          title="View Details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleOpenEdit(p)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 transition-colors"
+                          title="Edit Patient"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        {p.is_active && (
+                          <button
+                            onClick={() => {
+                              setDeletingPatient(p);
+                              setActionError(null);
+                            }}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/40 text-rose-400 border border-slate-700 hover:border-rose-500/30 transition-colors"
+                            title="Deactivate Patient & Account"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -276,14 +922,19 @@ export const PatientManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* Add Patient Modal */}
+      {/* ------------------------------------------------------------------ */}
+      {/* 1. Add Patient & Individual Account Modal */}
+      {/* ------------------------------------------------------------------ */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-panel max-w-lg w-full rounded-2xl p-6 space-y-5 border border-slate-700 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel max-w-xl w-full rounded-2xl p-6 space-y-5 border border-slate-700 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <UserPlus className="w-5 h-5 text-brand-400" />
-                <h3 className="text-base font-bold text-white">Register Patient in Surveillance Registry</h3>
+                <div>
+                  <h3 className="text-base font-bold text-white">Register Patient & Account</h3>
+                  <p className="text-[11px] text-slate-400">Creates patient record with linked individual login credentials</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -293,30 +944,74 @@ export const PatientManagementView: React.FC = () => {
               </button>
             </div>
 
-            {addSuccess && (
+            {actionSuccess && (
               <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>{addSuccess}</span>
+                <span>{actionSuccess}</span>
               </div>
             )}
 
-            {addError && (
+            {actionError && (
               <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span>{addError}</span>
+                <span>{actionError}</span>
               </div>
             )}
 
             <form onSubmit={handleCreatePatient} className="space-y-4 text-xs">
+              {/* Account Credentials Section */}
+              <div className="p-3.5 rounded-xl bg-brand-950/20 border border-brand-500/30 space-y-3">
+                <span className="text-[11px] font-bold text-brand-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Individual Login Credentials
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-slate-300 text-[11px] font-semibold flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-slate-400" />
+                      Login Email *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. rahul@example.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-300 text-[11px] font-semibold flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-slate-400" />
+                      Initial Password *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Enter initial password"
+                      value={formData.initial_password}
+                      onChange={(e) => setFormData({ ...formData, initial_password: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono"
+                    />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Patient can log into the phone app using either this Email or their Account ID (Pseudo ID).
+                </p>
+              </div>
+
+              {/* Patient Demographics */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-slate-400 text-[11px] font-semibold">Pseudo ID *</label>
+                  <label className="text-slate-400 text-[11px] font-semibold">Account / Pseudo ID *</label>
                   <input
                     type="text"
                     required
+                    placeholder="e.g. PAT-USER-101"
                     value={formData.pseudo_id}
                     onChange={(e) => setFormData({ ...formData, pseudo_id: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono font-bold text-brand-300"
                   />
                 </div>
                 <div className="space-y-1">
@@ -324,7 +1019,7 @@ export const PatientManagementView: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Alana P J"
+                    placeholder="e.g. Rahul Sharma"
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
@@ -332,7 +1027,7 @@ export const PatientManagementView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="text-slate-400 text-[11px] font-semibold">Age *</label>
                   <input
@@ -340,47 +1035,137 @@ export const PatientManagementView: React.FC = () => {
                     min="1"
                     max="120"
                     required
+                    placeholder="e.g. 28"
                     value={formData.age}
-                    onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
+                    onChange={(e) => setFormData({ ...formData, age: e.target.value === '' ? '' : Number(e.target.value) })}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-slate-400 text-[11px] font-semibold">Gender *</label>
                   <select
+                    required
                     value={formData.gender}
                     onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
                   >
+                    <option value="">Select Gender</option>
                     <option value="FEMALE">Female</option>
                     <option value="MALE">Male</option>
                     <option value="OTHER">Other</option>
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-slate-400 text-[11px] font-semibold">Ward Number *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
+                  <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-rose-400" />
+                    Diagnosed Disease *
+                  </label>
+                  <select
                     required
-                    value={formData.ward_number}
-                    onChange={(e) => setFormData({ ...formData, ward_number: Number(e.target.value) })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono"
-                  />
+                    value={formData.disease_id}
+                    onChange={(e) => {
+                      const d = diseases.find((item) => item.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        disease_id: e.target.value,
+                        disease_name: d ? d.name : '',
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs"
+                  >
+                    <option value="">Select Disease...</option>
+                    {diseases.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-slate-400 text-[11px] font-semibold">Contact Phone Number *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="+91-98470-12345"
-                  value={formData.contact_number}
-                  onChange={(e) => setFormData({ ...formData, contact_number: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono"
-                />
+              {/* Mobile Phone Availability */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-slate-300 text-[11px] font-semibold flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-brand-400" />
+                      Does the patient have a mobile phone? *
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      Determines whether mobile GPS telemetry surveillance is activated for this patient
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, has_phone: true }));
+                        setPhoneError(null);
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                        formData.has_phone
+                          ? 'bg-brand-600 border-brand-500 text-white shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Yes</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData((prev) => ({ ...prev, has_phone: false, contact_number: '' }));
+                        setPhoneError(null);
+                      }}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                        !formData.has_phone
+                          ? 'bg-amber-600 border-amber-500 text-white shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>No</span>
+                    </button>
+                  </div>
+                </div>
+
+                {formData.has_phone ? (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-slate-400 text-[11px] font-semibold">Contact Phone Number (10 Digits) *</label>
+                      {formData.contact_number && (
+                        <span className={`text-[10px] font-mono ${formData.contact_number.length === 10 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {formData.contact_number.length}/10 digits
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      maxLength={10}
+                      placeholder="Enter exactly 10 numeric digits (e.g. 9847012345)"
+                      value={formData.contact_number}
+                      onChange={handlePhoneChange}
+                      onBlur={handlePhoneBlur}
+                      className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white font-mono transition-colors ${
+                        phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-slate-800 focus:border-brand-500'
+                      }`}
+                    />
+                    {phoneError && (
+                      <p className="text-[10px] text-rose-400 flex items-center gap-1 mt-1 font-medium">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        <span>{phoneError}</span>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-amber-400 flex items-center gap-2">
+                    <Info className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>No mobile phone. Patient record will be registered without GPS location monitoring requirements or fake data.</span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -395,29 +1180,77 @@ export const PatientManagementView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-slate-400 text-[11px] font-semibold">District *</label>
-                  <select
-                    value={formData.district_name}
-                    onChange={(e) => setFormData({ ...formData, district_name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
-                  >
-                    <option value="Thiruvananthapuram">Thiruvananthapuram</option>
-                    <option value="Ernakulam">Ernakulam</option>
-                    <option value="Kozhikode">Kozhikode</option>
-                  </select>
-                </div>
+              {/* Kerala Administrative Location Hierarchy */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-brand-400" />
+                  Kerala Administrative Hierarchy
+                </span>
 
-                <div className="space-y-1">
-                  <label className="text-slate-400 text-[11px] font-semibold">Local Body *</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.local_body_name}
-                    onChange={(e) => setFormData({ ...formData, local_body_name: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-[11px]"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* District Dropdown (14 districts) */}
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">District (All 14) *</label>
+                    <select
+                      required
+                      value={formData.district_id}
+                      onChange={(e) => handleAddDistrictChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs"
+                    >
+                      <option value="">Select District</option>
+                      {districts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Local Body Dropdown (Cascading) */}
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">Local Body *</label>
+                    <select
+                      required
+                      disabled={!formData.district_id}
+                      value={formData.local_body_id}
+                      onChange={(e) => handleAddLocalBodyChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs disabled:opacity-50"
+                    >
+                      <option value="">
+                        {!formData.district_id ? "Select District first" : "Select Local Body"}
+                      </option>
+                      {addLocalBodies.map((lb) => (
+                        <option key={lb.id} value={lb.id}>
+                          {lb.name} ({lb.body_type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Ward Dropdown (Cascading & Searchable) */}
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">Ward (Searchable) *</label>
+                    <SearchableSelect
+                      id="add-patient-ward-select"
+                      value={formData.ward_id}
+                      onChange={(val) => handleAddWardChange(val)}
+                      options={addWards.map((w) => ({
+                        value: w.id,
+                        label: `Ward #${w.ward_number} - ${w.name}`,
+                        code: w.ward_code,
+                        number: w.ward_number,
+                        sublabel: w.ward_code ? `Official Code: ${w.ward_code}` : undefined,
+                      }))}
+                      placeholder={
+                        !formData.local_body_id
+                          ? "Select Local Body first"
+                          : "Search and select ward..."
+                      }
+                      disabled={!formData.local_body_id || addWards.length === 0}
+                      disabledPlaceholder={!formData.local_body_id ? "Select Local Body first" : "No wards found"}
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -425,17 +1258,17 @@ export const PatientManagementView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={addLoading}
-                  className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-md disabled:opacity-50 flex items-center gap-2"
+                  disabled={actionLoading}
+                  className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-md disabled:opacity-50 flex items-center gap-2 cursor-pointer"
                 >
-                  {addLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                  <span>Save Patient Record</span>
+                  {actionLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Patient & Create Account</span>
                 </button>
               </div>
             </form>
@@ -443,53 +1276,585 @@ export const PatientManagementView: React.FC = () => {
         </div>
       )}
 
-      {/* Patient Detail Modal */}
+      {/* ------------------------------------------------------------------ */}
+      {/* 2. Edit Patient Modal */}
+      {/* ------------------------------------------------------------------ */}
+      {editingPatient && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel max-w-xl w-full rounded-2xl p-6 space-y-5 border border-slate-700 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <Edit2 className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white">Edit Patient Record ({editingPatient.pseudo_id})</h3>
+                  <p className="text-[11px] text-slate-400">Update demographic, administrative location, or account credentials</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingPatient(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {actionSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{actionSuccess}</span>
+              </div>
+            )}
+
+            {actionError && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdatePatient} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[11px] font-semibold">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editFormData.full_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-rose-400" />
+                    Diagnosed Condition *
+                  </label>
+                  <select
+                    value={editFormData.disease_id}
+                    onChange={(e) => {
+                      const d = diseases.find((item) => item.id === e.target.value);
+                      setEditFormData({
+                        ...editFormData,
+                        disease_id: e.target.value,
+                        disease_name: d ? d.name : '',
+                      });
+                    }}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs"
+                  >
+                    <option value="">Select Condition...</option>
+                    {diseases.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({d.code}) &bull; {d.contagion_type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[11px] font-semibold">Age *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    required
+                    value={editFormData.age}
+                    onChange={(e) => setEditFormData({ ...editFormData, age: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[11px] font-semibold">Gender *</label>
+                  <select
+                    value={editFormData.gender}
+                    onChange={(e) => setEditFormData({ ...editFormData, gender: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
+                  >
+                    <option value="FEMALE">Female</option>
+                    <option value="MALE">Male</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Mobile Phone Availability in Edit Modal */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-slate-300 text-[11px] font-semibold flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-brand-400" />
+                      Does the patient have a mobile phone?
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      Toggle whether mobile GPS telemetry is active for this patient account
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData((prev) => ({ ...prev, has_phone: true }));
+                        setEditPhoneError(null);
+                      }}
+                      className={`px-3 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                        editFormData.has_phone
+                          ? 'bg-cyan-600 border-cyan-500 text-white shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>Yes</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditFormData((prev) => ({ ...prev, has_phone: false, contact_number: '' }));
+                        setEditPhoneError(null);
+                      }}
+                      className={`px-3 py-1 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                        !editFormData.has_phone
+                          ? 'bg-amber-600 border-amber-500 text-white shadow-md'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span>No</span>
+                    </button>
+                  </div>
+                </div>
+
+                {editFormData.has_phone ? (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-slate-400 text-[11px] font-semibold">Contact Phone (10 Digits) *</label>
+                      {editFormData.contact_number && (
+                        <span className={`text-[10px] font-mono ${editFormData.contact_number.length === 10 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                          {editFormData.contact_number.length}/10 digits
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={editFormData.contact_number}
+                      onChange={handleEditPhoneChange}
+                      className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white font-mono ${
+                        editPhoneError ? 'border-rose-500' : 'border-slate-800'
+                      }`}
+                    />
+                    {editPhoneError && (
+                      <p className="text-[10px] text-rose-400 flex items-center gap-1 mt-1 font-medium">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        <span>{editPhoneError}</span>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-amber-400">
+                    No mobile phone registered. GPS location monitoring is disabled for this patient.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-400 text-[11px] font-semibold">Residential Address *</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white"
+                />
+              </div>
+
+              {/* Account Credentials Update */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Linked Login Account
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">Account Email</label>
+                    <input
+                      type="email"
+                      value={editFormData.email}
+                      onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">New Password (leave blank to keep)</label>
+                    <input
+                      type="password"
+                      placeholder="••••••••••••"
+                      value={editFormData.password}
+                      onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Cascading Administrative Location Hierarchy */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-brand-400" />
+                  Kerala Administrative Hierarchy
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* District Dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">District (All 14) *</label>
+                    <select
+                      value={editFormData.district_id}
+                      onChange={(e) => handleEditDistrictChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs"
+                    >
+                      {districts.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Local Body Dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">Local Body *</label>
+                    <select
+                      value={editFormData.local_body_id}
+                      onChange={(e) => handleEditLocalBodyChange(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs"
+                    >
+                      {editLocalBodies.map((lb) => (
+                        <option key={lb.id} value={lb.id}>
+                          {lb.name} ({lb.body_type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Ward Dropdown (Cascading & Searchable) */}
+                  <div className="space-y-1">
+                    <label className="text-slate-400 text-[11px] font-semibold">Ward (Searchable) *</label>
+                    <SearchableSelect
+                      id="edit-patient-ward-select"
+                      value={editFormData.ward_id}
+                      onChange={(val) => handleEditWardChange(val)}
+                      options={editWards.map((w) => ({
+                        value: w.id,
+                        label: `Ward #${w.ward_number} - ${w.name}`,
+                        code: w.ward_code,
+                        number: w.ward_number,
+                        sublabel: w.ward_code ? `Official Code: ${w.ward_code}` : undefined,
+                      }))}
+                      placeholder="Search ward name, code (e.g. THUMPOLY)..."
+                      disabled={!editFormData.local_body_id || editWards.length === 0}
+                      disabledPlaceholder={!editFormData.local_body_id ? "Select Local Body first" : "No wards found"}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Status toggle */}
+              <div className="space-y-1 pt-1">
+                <label className="text-slate-400 text-[11px] font-semibold">Surveillance & Account Status</label>
+                <div className="flex items-center gap-4 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={editFormData.is_active}
+                      onChange={() => setEditFormData({ ...editFormData, is_active: true })}
+                    />
+                    <span className="text-emerald-400 font-semibold">Active Surveillance</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={!editFormData.is_active}
+                      onChange={() => setEditFormData({ ...editFormData, is_active: false })}
+                    />
+                    <span className="text-slate-400 font-semibold">Inactive / Deactivated</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingPatient(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold shadow-md disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  {actionLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 3. Delete / Deactivation Confirmation Dialog */}
+      {/* ------------------------------------------------------------------ */}
+      {deletingPatient && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel max-w-md w-full rounded-2xl p-6 space-y-4 border border-rose-500/30 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-2">
+              <h3 className="text-base font-bold text-white">
+                Deactivate Patient Record & Account?
+              </h3>
+              <p className="text-xs text-slate-300 font-mono">
+                {deletingPatient.pseudo_id} &bull; {deletingPatient.full_name}
+              </p>
+              <p className="text-xs text-slate-400 leading-relaxed pt-1">
+                Deactivating disables login access and revokes active quarantine monitoring while preserving all historical telemetry logs for audit.
+              </p>
+            </div>
+
+            {actionError && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span>{actionError}</span>
+              </div>
+            )}
+
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingPatient(null)}
+                disabled={actionLoading}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={actionLoading}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-lg shadow-rose-600/20 flex items-center gap-2 cursor-pointer"
+              >
+                {actionLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>Confirm Deactivation</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
+      {/* 4. Patient Detail Modal (Clear Administrative Location vs GPS Telemetry) */}
+      {/* ------------------------------------------------------------------ */}
       {selectedPatient && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="glass-panel max-w-lg w-full rounded-2xl p-6 space-y-5 border border-slate-700">
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel max-w-xl w-full rounded-2xl p-6 space-y-5 border border-slate-700 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <span className="text-[10px] font-mono uppercase text-slate-500">Patient File</span>
+                <span className="text-[10px] font-mono uppercase text-slate-500">Individual Patient Record</span>
                 <h3 className="text-lg font-bold text-white">{selectedPatient.pseudo_id}</h3>
               </div>
               <button
                 onClick={() => setSelectedPatient(null)}
                 className="p-1 rounded-lg text-slate-400 hover:text-white bg-slate-800"
               >
-                &times;
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                <span className="text-slate-500 block text-[10px] uppercase font-mono">Full Name</span>
-                <span className="font-semibold text-white text-sm">{selectedPatient.full_name}</span>
+            <div className="space-y-4 text-xs">
+              {/* Header card */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase font-mono">Full Name</span>
+                  <span className="font-semibold text-white text-sm">{selectedPatient.full_name}</span>
+                  <span className="text-slate-400 block text-[11px] font-sans mt-0.5">{selectedPatient.age} Yrs &bull; {selectedPatient.gender}</span>
+                </div>
+                <span className={`px-2.5 py-1 rounded text-[10px] font-bold ${
+                  selectedPatient.is_active ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'
+                }`}>
+                  {selectedPatient.is_active ? 'ACTIVE SURVEILLANCE' : 'INACTIVE'}
+                </span>
               </div>
 
+              {/* Disease Condition & Phone Status */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-500 block text-[10px] uppercase font-mono">Demographics</span>
-                  <span className="font-semibold text-slate-200">{selectedPatient.age} Yrs &bull; {selectedPatient.gender}</span>
+                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] uppercase font-mono flex items-center gap-1">
+                    <Activity className="w-3 h-3 text-rose-400" />
+                    Diagnosed Condition
+                  </span>
+                  <span className="font-semibold text-rose-300 text-xs block">
+                    {selectedPatient.disease_name || 'Under Surveillance Evaluation'}
+                  </span>
                 </div>
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <span className="text-slate-500 block text-[10px] uppercase font-mono">Contact</span>
-                  <span className="font-mono font-semibold text-slate-200">{selectedPatient.contact_number}</span>
+                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                  <span className="text-slate-500 block text-[10px] uppercase font-mono flex items-center gap-1">
+                    <Phone className="w-3 h-3 text-brand-400" />
+                    Mobile Phone Status
+                  </span>
+                  <span className="font-semibold text-white text-xs block">
+                    {selectedPatient.has_phone === false || !selectedPatient.contact_number ? (
+                      <span className="text-amber-400 font-sans">No Mobile Phone (GPS Inactive)</span>
+                    ) : (
+                      <span className="font-mono text-emerald-400">{selectedPatient.contact_number}</span>
+                    )}
+                  </span>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-                <span className="text-slate-500 block text-[10px] uppercase font-mono">Residence & Ward</span>
-                <div className="text-slate-200">{selectedPatient.address}</div>
-                <div className="text-[11px] text-brand-300 font-mono pt-1">
-                  {selectedPatient.district_name} &bull; {selectedPatient.local_body_name} (Ward #{selectedPatient.ward_number})
+              {/* Linked Account Details */}
+              <div className="p-3.5 rounded-xl bg-brand-950/20 border border-brand-500/30 space-y-2">
+                <span className="text-brand-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Individual Account Credentials
+                </span>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Account ID (Pseudo ID)</span>
+                    <span className="font-mono font-bold text-white text-xs">{selectedPatient.pseudo_id}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px]">Login Email</span>
+                    <span className="font-mono text-white text-xs truncate block">{selectedPatient.account_email || 'Linked User Account'}</span>
+                  </div>
                 </div>
+              </div>
+
+              {/* Administrative Location Hierarchy */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <span className="text-slate-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-brand-400" />
+                  Administrative Location (Kerala)
+                </span>
+                <div className="grid grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 block text-[9px] uppercase">District</span>
+                    <span className="text-white font-semibold">{selectedPatient.district_name}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 block text-[9px] uppercase">Local Body</span>
+                    <span className="text-white font-semibold truncate block">{selectedPatient.local_body_name}</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                    <span className="text-slate-500 block text-[9px] uppercase">Ward</span>
+                    <span className="text-white font-semibold block truncate">
+                      #{selectedPatient.ward_number} {selectedPatient.ward_name ? `(${selectedPatient.ward_name})` : ''}
+                    </span>
+                    {selectedPatient.ward_code && (
+                      <span className="text-[10px] text-indigo-400 font-mono block mt-0.5">
+                        Code: {selectedPatient.ward_code}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-300 pt-1">
+                  <span className="text-slate-500 font-mono">Address: </span>
+                  {selectedPatient.address}
+                </div>
+              </div>
+
+              {/* Surveillance GPS Sampling Interval Configuration */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <span className="text-slate-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                  Surveillance GPS Sampling Interval (Officer Configurable)
+                </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] text-slate-400">Cadence:</label>
+                    <select
+                      value={samplingInterval}
+                      onChange={(e) => setSamplingInterval(Number(e.target.value))}
+                      className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono"
+                    >
+                      <option value={1}>1 Minute (High Precision Testing)</option>
+                      <option value={5}>5 Minutes</option>
+                      <option value={10}>10 Minutes</option>
+                      <option value={15}>15 Minutes (Default Standard)</option>
+                      <option value={30}>30 Minutes</option>
+                      <option value={60}>60 Minutes (Hourly Cadence)</option>
+                    </select>
+                  </div>
+                  <span className="text-[11px] text-cyan-400 font-mono font-semibold">
+                    ~{samplingInterval} min telemetry interval
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Configures how frequently the mobile client captures and logs GPS observations during authorized monitoring sessions.
+                </p>
+              </div>
+
+              {/* Real-time GPS Telemetry */}
+              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                <span className="text-slate-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
+                  <Navigation className="w-3.5 h-3.5 text-emerald-400" />
+                  Real-time GPS Telemetry (Latest Observation)
+                </span>
+                {selectedPatient.has_phone === false || !selectedPatient.contact_number ? (
+                  <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-500/30 text-amber-300 text-[11px] flex items-center gap-2">
+                    <Info className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>GPS Telemetry Inactive: Patient does not have a mobile phone. Direct GPS location tracking is not applicable.</span>
+                  </div>
+                ) : selectedPatient.latest_latitude && selectedPatient.latest_longitude ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[11px]">
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase">Latitude</span>
+                      <span className="text-emerald-400 font-semibold">{selectedPatient.latest_latitude.toFixed(6)}</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase">Longitude</span>
+                      <span className="text-emerald-400 font-semibold">{selectedPatient.latest_longitude.toFixed(6)}</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase">Accuracy</span>
+                      <span className="text-white font-semibold">±{selectedPatient.latest_accuracy || 5}m</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 block text-[9px] uppercase">Source</span>
+                      <span className="text-cyan-400 font-semibold">{selectedPatient.latest_source || 'PATIENT_GPS'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 text-slate-500 italic text-[11px]">
+                    No GPS telemetry observations recorded yet for this patient account. Monitoring session pending.
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  const p = selectedPatient;
+                  setSelectedPatient(null);
+                  handleOpenEdit(p);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 text-xs font-semibold border border-slate-700 cursor-pointer"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Edit Record</span>
+              </button>
+
               <button
                 onClick={() => setSelectedPatient(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                className="px-4 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold cursor-pointer"
               >
                 Close
               </button>

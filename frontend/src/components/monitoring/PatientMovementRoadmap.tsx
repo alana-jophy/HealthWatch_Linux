@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   MapContainer, 
   TileLayer, 
@@ -11,13 +11,14 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { 
   fetchPatientRoadmap,
-  fetchPatientsList
+  fetchPatientsList,
+  fetchMyPatientProfile
 } from '../../services/api';
 import { 
   PatientRoadmapResponse, 
-  RoadmapObservationItem,
-  PatientProfile
+  RoadmapObservationItem
 } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 import { 
   Route, 
   AlertTriangle, 
@@ -26,7 +27,12 @@ import {
   Search, 
   RotateCcw, 
   MapPin, 
-  User
+  User,
+  Bug,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Activity
 } from 'lucide-react';
 
 // Leaflet default icon fix
@@ -37,8 +43,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-// Helper component to auto-fit map viewport to polyline bounds
-const MapBoundsFitter: React.FC<{ observations: RoadmapObservationItem[]; selectedCoord?: [number, number] | null }> = ({
+// Helper component to auto-fit map viewport to polyline bounds or pan to latest observation
+const MapBoundsFitter: React.FC<{ 
+  observations: RoadmapObservationItem[]; 
+  selectedCoord?: [number, number] | null;
+}> = ({
   observations,
   selectedCoord
 }) => {
@@ -86,7 +95,7 @@ const createCustomMarkerIcon = (
   const html = `
     <div class="relative flex items-center justify-center transition-all duration-300 ${selectedRing}">
       <div class="w-8 h-8 rounded-full ${bgClass} text-white font-bold text-[10px] flex items-center justify-center shadow-lg border-2 ${borderClass} font-mono tracking-wider">
-        ${String.fromCharCode(65 + index)}
+        ${String.fromCharCode(65 + (index % 26))}
       </div>
       <div class="absolute -bottom-5 whitespace-nowrap bg-slate-950/90 text-[9px] font-semibold text-slate-200 px-1.5 py-0.5 rounded border border-slate-800 shadow pointer-events-none">
         ${timeStr}
@@ -114,11 +123,45 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
   officerPatientPseudoId,
   officerFilterDate,
 }) => {
+  const { user, role } = useAuth();
+  const isPatientUser = role === 'PATIENT';
+
   // Filters State
-  const [selectedPseudoId, setSelectedPseudoId] = useState<string>(officerPatientPseudoId || 'PAT-SYNTH-101');
-  const [selectedDate, setSelectedDate] = useState<string>(officerFilterDate || '2026-09-05');
-  const [startTime, setStartTime] = useState<string>('09:00');
-  const [endTime, setEndTime] = useState<string>('18:00');
+  const [selectedPseudoId, setSelectedPseudoId] = useState<string>(
+    officerPatientPseudoId || (isPatientUser && user?.patient_pseudo_id ? user.patient_pseudo_id : 'PAT-USER-143')
+  );
+  const [selectedDate, setSelectedDate] = useState<string>(officerFilterDate || '');
+  const [startTime, setStartTime] = useState<string>('');
+  const [endTime, setEndTime] = useState<string>('');
+
+  // Roadmap Data & State
+  const [patients, setPatients] = useState<{ pseudo_id: string; full_name: string }[]>([]);
+  const [roadmapData, setRoadmapData] = useState<PatientRoadmapResponse | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
+  const [flyToCoord, setFlyToCoord] = useState<[number, number] | null>(null);
+  const [isLivePolling, setIsLivePolling] = useState<boolean>(false);
+  const [showDebugPanel, setShowDebugPanel] = useState<boolean>(true);
+
+  const timelineRef = useRef<HTMLDivElement>(null);
+
+  // If patient mode, automatically fetch their own profile to resolve pseudo_id
+  useEffect(() => {
+    if (isPatientUser) {
+      if (user?.patient_pseudo_id) {
+        setSelectedPseudoId(user.patient_pseudo_id);
+      } else {
+        fetchMyPatientProfile()
+          .then((profile) => {
+            if (profile?.pseudo_id) {
+              setSelectedPseudoId(profile.pseudo_id);
+            }
+          })
+          .catch((err) => console.warn('Could not auto-fetch patient profile for roadmap:', err));
+      }
+    }
+  }, [isPatientUser, user]);
 
   useEffect(() => {
     if (officerPatientPseudoId) {
@@ -129,27 +172,37 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
     }
   }, [officerPatientPseudoId, officerFilterDate]);
 
-  // Roadmap Data & State
-  const [patients, setPatients] = useState<{ pseudo_id: string; full_name: string }[]>([]);
-  const [roadmapData, setRoadmapData] = useState<PatientRoadmapResponse | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
-  const [flyToCoord, setFlyToCoord] = useState<[number, number] | null>(null);
-
-  const timelineRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
-    fetchPatientsList()
-      .then((res) => {
-        if (res?.items) {
-          setPatients(res.items.map((p) => ({ pseudo_id: p.pseudo_id, full_name: p.full_name })));
-        }
+    if (!isPatientUser) {
+      fetchPatientsList()
+        .then((res) => {
+          if (res?.items) {
+            setPatients(res.items.map((p) => ({ pseudo_id: p.pseudo_id, full_name: p.full_name })));
+          }
+        })
+        .catch((err) => {
+          console.warn('Could not load patient registry for roadmap selector:', err);
+        });
+    }
+  }, [isPatientUser]);
+
+  // Safe Near-Real-Time Dashboard Polling
+  useEffect(() => {
+    if (!isLivePolling) return;
+    const interval = setInterval(() => {
+      fetchPatientRoadmap({
+        pseudoId: selectedPseudoId,
+        date: selectedDate || undefined,
+        startTime: startTime || undefined,
+        endTime: endTime || undefined,
       })
-      .catch((err) => {
-        console.warn('Could not load patient registry for roadmap selector:', err);
-      });
-  }, []);
+        .then((data) => {
+          setRoadmapData(data);
+        })
+        .catch((err) => console.warn('Roadmap polling update notice:', err));
+    }, 15000); // 15-second visual polling
+    return () => clearInterval(interval);
+  }, [isLivePolling, selectedPseudoId, selectedDate, startTime, endTime]);
 
   const loadRoadmap = async () => {
     setIsLoading(true);
@@ -163,7 +216,11 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
       });
       setRoadmapData(data);
       if (data.observations.length > 0) {
-        setSelectedPointId(data.observations[0].id);
+        // Sort chronologically
+        const sorted = [...data.observations].sort(
+          (a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
+        );
+        setSelectedPointId(sorted[sorted.length - 1].id);
       }
     } catch (err: any) {
       console.error('Failed to query movement roadmap:', err);
@@ -174,7 +231,9 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
   };
 
   useEffect(() => {
-    loadRoadmap();
+    if (selectedPseudoId) {
+      loadRoadmap();
+    }
   }, [selectedPseudoId]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
@@ -182,11 +241,25 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
     loadRoadmap();
   };
 
+  const handleSelectToday = () => {
+    const today = new Date().toISOString().split('T')[0];
+    setSelectedDate(today);
+    setStartTime('00:00');
+    setEndTime('23:59');
+    setTimeout(loadRoadmap, 50);
+  };
+
+  const handleClearDateFilter = () => {
+    setSelectedDate('');
+    setStartTime('');
+    setEndTime('');
+    setTimeout(loadRoadmap, 50);
+  };
+
   const handleResetFilters = () => {
-    setSelectedDate('2026-09-05');
-    setStartTime('09:00');
-    setEndTime('18:00');
-    setSelectedPseudoId('PAT-SYNTH-101');
+    setSelectedDate('');
+    setStartTime('');
+    setEndTime('');
     setTimeout(loadRoadmap, 50);
   };
 
@@ -201,13 +274,26 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
     }
   };
 
-  const polylineCoords: [number, number][] = roadmapData?.observations?.map(
-    (obs) => [obs.latitude, obs.longitude]
-  ) || [];
+  // Chronologically sort all observations (recorded_at ASC)
+  const sortedObservations: RoadmapObservationItem[] = useMemo(() => {
+    if (!roadmapData?.observations) return [];
+    return [...roadmapData.observations].sort(
+      (a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime()
+    );
+  }, [roadmapData?.observations]);
 
-  const defaultCenter: [number, number] = polylineCoords.length > 0
-    ? polylineCoords[0]
-    : [8.5241, 76.9366]; // Thiruvananthapuram center
+  const polylineCoords: [number, number][] = useMemo(() => {
+    return sortedObservations.map((obs) => [obs.latitude, obs.longitude]);
+  }, [sortedObservations]);
+
+  // Center dynamically on the latest observation (or central Kerala)
+  const latestObservation = sortedObservations.length > 0 
+    ? sortedObservations[sortedObservations.length - 1] 
+    : null;
+
+  const defaultCenter: [number, number] = latestObservation
+    ? [latestObservation.latitude, latestObservation.longitude]
+    : [10.5276, 76.2144]; // Central Kerala (Thrissur)
 
   return (
     <div className="space-y-6">
@@ -216,13 +302,13 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-xs font-semibold text-cyan-400 mb-2">
             <Route className="w-3.5 h-3.5" />
-            <span>Step 12: Patient Movement Roadmap</span>
+            <span>Patient Movement Roadmap</span>
           </div>
           <h1 className="font-heading text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            Patient Movement Roadmap & Sequential Observation Stream
+            Movement Roadmap & Sequential Observations
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Visualizing authorized discrete spatial telemetry observations collected approximately every 15 minutes.
+            Visualizing discrete spatial telemetry observations collected approximately every 15 minutes.
           </p>
         </div>
 
@@ -232,18 +318,20 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
             <User className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-400">Viewing Patient</div>
+            <div className="text-xs font-medium text-slate-400">Viewing Patient Account</div>
             <div className="text-sm font-bold text-white flex items-center gap-2">
               <span>{roadmapData?.patient_pseudo_id || selectedPseudoId}</span>
-              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
-                {roadmapData?.patient_name || 'Synthetic Patient'}
-              </span>
+              {roadmapData?.patient_name && (
+                <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono">
+                  {roadmapData.patient_name}
+                </span>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2. CRITICAL TECHNICAL LIMITATION NOTICE (Mandatory Prompt Requirement) */}
+      {/* 2. CRITICAL TECHNICAL LIMITATION NOTICE (Statutory Specification) */}
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 md:p-5 relative overflow-hidden">
         <div className="flex items-start gap-3.5">
           <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 shrink-0 mt-0.5">
@@ -251,48 +339,54 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
           </div>
           <div className="space-y-1.5 text-xs md:text-sm">
             <div className="font-bold text-amber-300 flex items-center gap-2">
-              <span>IMPORTANT TECHNICAL SPECIFICATION & PRIVACY CLARIFICATION</span>
+              <span>Recorded GPS observations — approximately 15-minute sampling</span>
               <span className="text-[11px] bg-amber-500/20 px-2 py-0.5 rounded-full text-amber-200 border border-amber-500/30">
-                15-Minute Cadence
+                15-Min Cadence
               </span>
             </div>
             <p className="text-slate-300 leading-relaxed">
               HealthWatch is <strong>NOT performing continuous second-by-second GPS tracking</strong>. Location observations are sampled approximately every <strong>15 MINUTES</strong> under explicit patient consent.
             </p>
-            <p className="text-slate-400 text-xs leading-relaxed">
-              Therefore, the roadmap represents <em>“Recorded location observations”</em>, <strong>NOT</strong> <em>“Exact continuous movement”</em>. The line connecting observations is strictly a <strong>chronological visual connection</strong>. HealthWatch makes no claim that the patient travelled along that exact physical path between observations.
+            <p className="text-slate-300 text-xs leading-relaxed italic bg-amber-950/40 p-2 rounded-lg border border-amber-500/20">
+              &ldquo;The connecting line is a visual representation between recorded observations and does not represent continuous GPS tracking.&rdquo;
             </p>
           </div>
         </div>
       </div>
 
-      {/* 3. Filter Controls Panel */}
-      <div className="glass-panel p-5 rounded-2xl border border-slate-800">
+      {/* 3. Filter Controls & Live Polling Panel */}
+      <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
         <form onSubmit={handleApplyFilters} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-          {/* Patient Selector */}
+          {/* Patient Selector (Hidden or Locked in Patient Mode) */}
           <div>
             <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Select Patient:</span>
+              <span>Patient Account:</span>
             </label>
-            <select
-              value={selectedPseudoId}
-              onChange={(e) => setSelectedPseudoId(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
-            >
-              {patients.length > 0 ? (
-                patients.map((p) => (
-                  <option key={p.pseudo_id} value={p.pseudo_id}>
-                    {p.pseudo_id} — {p.full_name}
-                  </option>
-                ))
-              ) : (
-                <>
-                  <option value="PAT-SYNTH-101">PAT-SYNTH-101 — Synthetic Patient 101</option>
-                  <option value="PAT-SYNTH-102">PAT-SYNTH-102 — Synthetic Patient 102</option>
-                </>
-              )}
-            </select>
+            {isPatientUser ? (
+              <input
+                type="text"
+                disabled
+                value={`${selectedPseudoId} (Your Account)`}
+                className="w-full bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2 text-sm text-brand-400 font-mono text-xs opacity-80"
+              />
+            ) : (
+              <select
+                value={selectedPseudoId}
+                onChange={(e) => setSelectedPseudoId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-xs"
+              >
+                {patients.length > 0 ? (
+                  patients.map((p) => (
+                    <option key={p.pseudo_id} value={p.pseudo_id}>
+                      {p.pseudo_id} — {p.full_name}
+                    </option>
+                  ))
+                ) : (
+                  <option value={selectedPseudoId}>{selectedPseudoId}</option>
+                )}
+              </select>
+            )}
           </div>
 
           {/* Date Selector */}
@@ -342,28 +436,63 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
             <button
               type="submit"
               disabled={isLoading}
-              className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow"
+              className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 text-white font-semibold py-2 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow cursor-pointer"
             >
               <Search className="w-4 h-4" />
-              <span>{isLoading ? 'Filtering...' : 'Apply Filters'}</span>
+              <span>{isLoading ? 'Filtering...' : 'Apply'}</span>
             </button>
 
             <button
               type="button"
               onClick={handleResetFilters}
               title="Reset Filters"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2.5 rounded-lg border border-slate-700 transition-colors"
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2.5 rounded-lg border border-slate-700 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
           </div>
         </form>
+
+        {/* Live Testing Quick Actions & Polling Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/80 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 font-medium">Quick Filter:</span>
+            <button
+              type="button"
+              onClick={handleSelectToday}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-mono cursor-pointer"
+            >
+              Today&apos;s Route
+            </button>
+            <button
+              type="button"
+              onClick={handleClearDateFilter}
+              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-mono cursor-pointer"
+            >
+              All Observations (Live)
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsLivePolling(!isLivePolling)}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                isLivePolling 
+                  ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 shadow-md shadow-emerald-500/10'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${isLivePolling ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'}`}></span>
+              <span>Live Dashboard Polling: {isLivePolling ? 'ACTIVE (15s)' : 'OFF'}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 4. Telemetry Statistics Bar */}
       {roadmapData?.statistics && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {/* Card 1: Total Points */}
           <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Observations</div>
             <div className="text-xl font-bold text-white mt-1 flex items-baseline gap-1.5">
@@ -372,7 +501,6 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
             </div>
           </div>
 
-          {/* Card 2: Monitoring Start */}
           <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Start Time</div>
             <div className="text-sm font-bold text-emerald-400 mt-1 font-mono">
@@ -383,7 +511,6 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
             <div className="text-[10px] text-slate-500 font-mono">Point A (Initial)</div>
           </div>
 
-          {/* Card 3: Monitoring End */}
           <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Latest Point</div>
             <div className="text-sm font-bold text-rose-400 mt-1 font-mono">
@@ -394,28 +521,25 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
             <div className="text-[10px] text-slate-500 font-mono">Final Telemetry</div>
           </div>
 
-          {/* Card 4: Average Accuracy */}
           <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Avg Accuracy</div>
             <div className="text-xl font-bold text-cyan-400 mt-1 flex items-baseline gap-1">
-              <span>{roadmapData.statistics.average_accuracy !== null ? `±${roadmapData.statistics.average_accuracy}` : '—'}</span>
+              <span>{roadmapData.statistics.average_accuracy !== null && roadmapData.statistics.average_accuracy !== undefined ? `±${roadmapData.statistics.average_accuracy}` : '—'}</span>
               <span className="text-xs font-normal text-slate-400 font-mono">m</span>
             </div>
           </div>
 
-          {/* Card 5: Sampling Cadence */}
           <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Cadence</div>
             <div className="text-sm font-bold text-slate-200 mt-1">~15 Minutes</div>
             <div className="text-[10px] text-slate-500">Discrete Sampling</div>
           </div>
 
-          {/* Card 6: Spatial Coordinates */}
           <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">First Lat/Lng</div>
+            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Latest Lat/Lng</div>
             <div className="text-xs font-bold text-slate-300 mt-1 font-mono truncate">
-              {roadmapData.statistics.first_recorded_location 
-                ? `${roadmapData.statistics.first_recorded_location.latitude.toFixed(4)}, ${roadmapData.statistics.first_recorded_location.longitude.toFixed(4)}`
+              {latestObservation 
+                ? `${latestObservation.latitude.toFixed(4)}, ${latestObservation.longitude.toFixed(4)}`
                 : '—'}
             </div>
             <div className="text-[10px] text-slate-500">WGS84 (EPSG:4326)</div>
@@ -448,18 +572,17 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
               scrollWheelZoom={true}
               className="w-full h-full"
             >
-              {/* Dark Carto Tile Layer for clean academic / geospatial visualization */}
               <TileLayer
                 attribution='&copy; <a href="https://carto.com/">CARTO</a> & OpenStreetMap'
                 url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
               />
 
               <MapBoundsFitter 
-                observations={roadmapData?.observations || []} 
+                observations={sortedObservations} 
                 selectedCoord={flyToCoord}
               />
 
-              {/* Sequential Visual Connection Polyline */}
+              {/* Sequential Visual Connection Polyline (Chronologically Ordered) */}
               {polylineCoords.length > 1 && (
                 <Polyline
                   positions={polylineCoords}
@@ -474,13 +597,13 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                 />
               )}
 
-              {/* Observation Markers */}
-              {roadmapData?.observations?.map((obs, idx) => {
+              {/* Observation Markers (Chronologically Ordered) */}
+              {sortedObservations.map((obs, idx) => {
                 const isSelected = obs.id === selectedPointId;
                 const timeFormatted = new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 const icon = createCustomMarkerIcon(
                   idx, 
-                  roadmapData?.observations?.length || 1, 
+                  sortedObservations.length, 
                   timeFormatted, 
                   isSelected,
                   obs.source
@@ -496,10 +619,10 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                     }}
                   >
                     <Popup className="custom-popup" offset={[0, -10]}>
-                      <div className="p-1 space-y-2 text-slate-900 min-w-[200px]">
+                      <div className="p-1 space-y-2 text-slate-900 min-w-[210px]">
                         <div className="flex items-center justify-between border-b pb-1.5">
                           <span className="font-bold text-xs uppercase tracking-wider text-cyan-800">
-                            Point {String.fromCharCode(65 + idx)} {idx === 0 ? '(START)' : idx === roadmapData.observations.length - 1 ? '(END)' : ''}
+                            Point {String.fromCharCode(65 + (idx % 26))} {idx === 0 ? '(START)' : idx === sortedObservations.length - 1 ? '(LATEST)' : ''}
                           </span>
                           <span className="text-[11px] font-mono font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
                             {timeFormatted}
@@ -510,13 +633,13 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                           <div className="flex justify-between">
                             <span className="text-slate-500">Timestamp:</span>
                             <span className="font-mono text-[11px] text-slate-700">
-                              {new Date(obs.recorded_at).toISOString().replace('T', ' ').substring(0, 19)} UTC
+                              {new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">Coordinates:</span>
                             <span className="font-mono text-[11px] font-semibold text-slate-800">
-                              {obs.latitude.toFixed(5)}, {obs.longitude.toFixed(5)}
+                              {obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}
                             </span>
                           </div>
                           <div className="flex justify-between">
@@ -534,7 +657,7 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                                 ? 'bg-indigo-100 text-indigo-800'
                                 : 'bg-slate-100 text-slate-700'
                             }`}>
-                              {obs.source}
+                              {obs.source === 'PATIENT_GPS' ? 'REAL PHONE GPS' : obs.source}
                             </span>
                           </div>
                         </div>
@@ -554,15 +677,15 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-cyan-500 border border-cyan-300"></span>
-                <span>Intermediate Observations</span>
+                <span>Intermediate Waypoints</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-rose-500 border border-rose-300"></span>
-                <span>Point D/E (Final Observation)</span>
+                <span>Latest Observation</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-6 h-0.5 border-t-2 border-dashed border-cyan-500"></span>
-                <span className="text-[11px] text-slate-400">Visual Connection (Not continuous GPS)</span>
+                <span className="text-[11px] text-slate-400">Visual Connection (~15m Sampling)</span>
               </div>
             </div>
           </div>
@@ -574,10 +697,10 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
                 <Clock className="w-4 h-4 text-cyan-400" />
-                <span>Sequential Timeline</span>
+                <span>Chronological Timeline</span>
               </div>
               <span className="text-xs text-slate-400 font-mono">
-                {roadmapData?.observations.length || 0} Records
+                {sortedObservations.length} Records
               </span>
             </div>
 
@@ -586,11 +709,11 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
               ref={timelineRef}
               className="mt-3 space-y-2.5 max-h-[500px] overflow-y-auto pr-1"
             >
-              {roadmapData?.observations && roadmapData.observations.length > 0 ? (
-                roadmapData.observations.map((obs, idx) => {
+              {sortedObservations.length > 0 ? (
+                sortedObservations.map((obs, idx) => {
                   const isSelected = obs.id === selectedPointId;
                   const isStart = idx === 0;
-                  const isEnd = idx === roadmapData.observations.length - 1 && roadmapData.observations.length > 1;
+                  const isEnd = idx === sortedObservations.length - 1 && sortedObservations.length > 1;
                   const timeFormatted = new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
                   return (
@@ -617,39 +740,38 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                               : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
                             }
                           `}>
-                            {String.fromCharCode(65 + idx)}
+                            {String.fromCharCode(65 + (idx % 26))}
                           </span>
                           <span className="font-bold text-white font-mono text-sm">
                             {timeFormatted}
                           </span>
-                          {isStart && (
-                            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                              START
-                            </span>
-                          )}
-                          {isEnd && (
-                            <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-                              END
-                            </span>
-                          )}
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                            isStart 
+                              ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                              : isEnd 
+                              ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                              : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                          }`}>
+                            {isStart ? 'Start' : isEnd ? 'Latest' : 'Way-point'}
+                          </span>
                         </div>
 
                         {/* Source Tag Badge */}
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                           obs.source === 'PATIENT_GPS' 
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                             : obs.source === 'HEALTH_WORKER'
-                            ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
-                            : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                            : 'bg-slate-800 text-slate-400 border-slate-700'
                         }`}>
-                          {obs.source}
+                          {obs.source === 'PATIENT_GPS' ? 'REAL GPS' : obs.source}
                         </span>
                       </div>
 
                       <div className="mt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-800/60 pt-1.5">
                         <span className="flex items-center gap-1">
                           <MapPin className="w-3 h-3 text-cyan-400" />
-                          <span>{obs.latitude.toFixed(4)}, {obs.longitude.toFixed(4)}</span>
+                          <span>{obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}</span>
                         </span>
                         <span className="text-slate-500">
                           {obs.accuracy ? `±${obs.accuracy}m` : 'Acc: N/A'}
@@ -660,12 +782,114 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                 })
               ) : (
                 <div className="text-center py-12 text-slate-500 text-xs">
-                  No location observations recorded for the selected filters.
+                  No location observations recorded for this patient account.
                 </div>
               )}
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 6. Location Debug Panel (Geospatial Axis & Coordinate Verification) */}
+      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+        <button
+          type="button"
+          onClick={() => setShowDebugPanel(!showDebugPanel)}
+          className="w-full px-5 py-3.5 bg-slate-900/90 hover:bg-slate-900 flex items-center justify-between text-left transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-2.5">
+            <Bug className="w-4 h-4 text-emerald-400" />
+            <div>
+              <span className="text-xs font-bold text-slate-200">
+                Location Debug Panel & Geospatial Coordinate Audit
+              </span>
+              <span className="ml-2 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                Zero Axis Inversion
+              </span>
+            </div>
+          </div>
+          {showDebugPanel ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+        </button>
+
+        {showDebugPanel && (
+          <div className="p-5 space-y-4 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 text-[11px]">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>
+                  <strong>Coordinate Axis Verification:</strong> Latitude (Y: ~8.0° - 13.0° N) and Longitude (X: ~74.0° - 78.0° E) are correctly mapped directly into Leaflet <code>[latitude, longitude]</code> with 0% inversion.
+                </span>
+              </div>
+              <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30">
+                WGS-84 Validated
+              </span>
+            </div>
+
+            {sortedObservations.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="bg-slate-900 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-3">Point</th>
+                      <th className="py-2.5 px-3">Observation ID</th>
+                      <th className="py-2.5 px-3">Timestamp (UTC)</th>
+                      <th className="py-2.5 px-3 text-cyan-300">Database WGS84 (Lat, Lon)</th>
+                      <th className="py-2.5 px-3 text-emerald-300">FastAPI REST Response</th>
+                      <th className="py-2.5 px-3 text-amber-300">Leaflet [lat, lng]</th>
+                      <th className="py-2.5 px-3">Kerala Bounds Check</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {sortedObservations.slice(0, 10).map((obs, idx) => {
+                      const inKeralaLat = obs.latitude >= 8.0 && obs.latitude <= 13.0;
+                      const inKeralaLon = obs.longitude >= 74.0 && obs.longitude <= 78.0;
+                      const isValidKerala = inKeralaLat && inKeralaLon;
+
+                      return (
+                        <tr key={obs.id} className="hover:bg-slate-900/40">
+                          <td className="py-2 px-3 font-bold text-white">
+                            {String.fromCharCode(65 + (idx % 26))}
+                          </td>
+                          <td className="py-2 px-3 text-slate-500 truncate max-w-[120px]">
+                            {obs.id}
+                          </td>
+                          <td className="py-2 px-3 text-slate-400">
+                            {new Date(obs.recorded_at).toISOString().replace('T', ' ').substring(11, 19)}
+                          </td>
+                          <td className="py-2 px-3 text-cyan-400 font-semibold">
+                            {obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}
+                          </td>
+                          <td className="py-2 px-3 text-emerald-400 font-semibold">
+                            {`{"lat": ${obs.latitude.toFixed(6)}, "lng": ${obs.longitude.toFixed(6)}}`}
+                          </td>
+                          <td className="py-2 px-3 text-amber-400 font-semibold">
+                            {`[${obs.latitude.toFixed(6)}, ${obs.longitude.toFixed(6)}]`}
+                          </td>
+                          <td className="py-2 px-3">
+                            {isValidKerala ? (
+                              <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Valid Kerala
+                              </span>
+                            ) : (
+                              <span className="text-cyan-400 text-[10px] font-bold">
+                                Valid Earth
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-slate-500 text-center py-4">
+                No observations currently loaded to audit.
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

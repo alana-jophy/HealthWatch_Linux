@@ -1,5 +1,6 @@
 from typing import Any, Dict, Optional
 from fastapi import HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -31,9 +32,20 @@ class DatabaseConnectionException(HealthWatchException):
         )
 
 
+class EntityNotFoundException(HealthWatchException):
+    """Raised when a requested resource is not found."""
+
+    def __init__(self, message: str = "Requested entity not found", details: Optional[Dict[str, Any]] = None):
+        super().__init__(
+            message=message,
+            status_code=status.HTTP_404_NOT_FOUND,
+            details=details,
+        )
+
+
 async def healthwatch_exception_handler(request: Request, exc: HealthWatchException) -> JSONResponse:
-    """Handles custom HealthWatchException errors."""
-    logger.error(f"HealthWatchException [{exc.status_code}]: {exc.message} - Path: {request.url.path}")
+    """Handles domain-specific HealthWatch exceptions."""
+    logger.error(f"HealthWatchException [{exc.status_code}] on {request.url.path}: {exc.message}")
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -52,14 +64,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     logger.warning(f"Validation error on {request.url.path}: {exc.errors()}")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={
+        content=jsonable_encoder({
             "success": False,
             "error": {
                 "type": "ValidationError",
                 "message": "Invalid request parameters or payload",
                 "details": exc.errors(),
             },
-        },
+        }),
     )
 
 
@@ -70,6 +82,7 @@ async def generic_http_exception_handler(request: Request, exc: HTTPException) -
         status_code=exc.status_code,
         content={
             "success": False,
+            "detail": exc.detail,
             "error": {
                 "type": "HTTPException",
                 "message": exc.detail,

@@ -6,6 +6,7 @@ import {
   DiseaseItem 
 } from '../../types';
 import { Filter, RotateCcw, MapPin, ChevronRight, Calendar, Activity } from 'lucide-react';
+import { SearchableSelect } from '../common/SearchableSelect';
 
 interface GISFilterBarProps {
   diseases: DiseaseItem[];
@@ -80,7 +81,7 @@ export const GISFilterBar: React.FC<GISFilterBarProps> = ({
               </span>
               <ChevronRight className="w-3 h-3 text-slate-600" />
               <span className={currentWardObj ? 'text-purple-300 font-medium' : 'text-slate-500'}>
-                {currentWardObj ? `Ward #${currentWardObj.ward_number}` : 'All Wards'}
+                {currentWardObj ? `Ward #${currentWardObj.ward_number} - ${currentWardObj.name} ${currentWardObj.ward_code ? `(${currentWardObj.ward_code})` : ''}` : 'All Wards'}
               </span>
             </div>
           </div>
@@ -146,25 +147,23 @@ export const GISFilterBar: React.FC<GISFilterBarProps> = ({
         <div className="space-y-1">
           <label className="text-[11px] font-semibold text-purple-400 flex items-center gap-1">
             <MapPin className="w-3 h-3" />
-            <span>Ward</span>
+            <span>Ward (Searchable)</span>
           </label>
-          <select
+          <SearchableSelect
+            id="gis-filter-ward-select"
             value={selectedWard}
-            onChange={(e) => onChangeWard(e.target.value)}
-            disabled={!selectedLocalBody && wards.length === 0}
-            className={`w-full bg-slate-950 border rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors ${
-              !selectedLocalBody ? 'border-slate-800 text-slate-500' : 'border-slate-700'
-            }`}
-          >
-            <option value="">
-              {!selectedLocalBody ? '[Select Local Body first]' : '[All Wards ▼]'}
-            </option>
-            {wards.map((w) => (
-              <option key={w.id} value={w.id}>
-                Ward #{w.ward_number}: {w.name}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => onChangeWard(val)}
+            options={wards.map((w) => ({
+              value: w.id,
+              label: `Ward #${w.ward_number} - ${w.name}`,
+              code: w.ward_code,
+              number: w.ward_number,
+              sublabel: w.ward_code ? `Official Code: ${w.ward_code}` : undefined,
+            }))}
+            placeholder="[All Wards Search...]"
+            disabled={!selectedLocalBody || wards.length === 0}
+            disabledPlaceholder={!selectedLocalBody ? '[Select Local Body first]' : '[No Wards Found]'}
+          />
         </div>
 
         {/* 4. Disease Catalog Filter */}

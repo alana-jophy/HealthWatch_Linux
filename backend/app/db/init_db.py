@@ -48,9 +48,16 @@ SYNTHETIC_USERS = [
         "is_superuser": False,
     },
     {
-        "email": "patient.synth101@healthwatch.org",
+        "email": "officer@test.com",
+        "password": "Officer@123",
+        "full_name": "Dr. Test Officer (Surveillance Lead)",
+        "role": RoleEnum.PUBLIC_HEALTH_OFFICER.value,
+        "is_superuser": False,
+    },
+    {
+        "email": "alana@healthwatch.org",
         "password": "Patient@HealthWatch2026",
-        "full_name": "Synthetic Patient 101",
+        "full_name": "Alana P J",
         "role": RoleEnum.PATIENT.value,
         "is_superuser": False,
     },
@@ -105,8 +112,219 @@ SYNTHETIC_DISEASES = [
     },
 ]
 
-# Synthetic Kerala GIS Hierarchy (Districts, Local Bodies, Wards)
+# Kerala GIS Hierarchy (All 14 Official Districts + Demonstration Local Bodies & Wards)
+# NOTE: Local body and ward geometries represent synthetic approximations for academic surveillance demonstration,
+# and do not claim to be official government land survey GIS boundaries.
 SYNTHETIC_DISTRICTS = [
+    {
+        "code": "KL-ALP",
+        "name": "Alappuzha",
+        "state": "Kerala",
+        "lat": 9.4981,
+        "lng": 76.3388,
+        "local_bodies": [
+            {
+                "name": "Alappuzha Municipality",
+                "type": "Municipality",
+                "lat": 9.4981,
+                "lng": 76.3388,
+                "wards": [
+                    {"number": 1, "name": "Alappuzha Beach Ward", "lat": 9.4950, "lng": 76.3250},
+                    {"number": 2, "name": "Mullakkal Ward", "lat": 9.4920, "lng": 76.3350},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-EKM",
+        "name": "Ernakulam",
+        "state": "Kerala",
+        "lat": 9.9816,
+        "lng": 76.2999,
+        "local_bodies": [
+            {
+                "name": "Kochi Municipal Corporation",
+                "type": "Corporation",
+                "lat": 9.9675,
+                "lng": 76.2422,
+                "wards": [
+                    {"number": 5, "name": "Marine Drive Ward", "lat": 9.9780, "lng": 76.2750},
+                    {"number": 6, "name": "Edappally Ward", "lat": 10.0240, "lng": 76.3080},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-IDK",
+        "name": "Idukki",
+        "state": "Kerala",
+        "lat": 9.8494,
+        "lng": 76.9806,
+        "local_bodies": [
+            {
+                "name": "Thodupuzha Municipality",
+                "type": "Municipality",
+                "lat": 9.8959,
+                "lng": 76.7184,
+                "wards": [
+                    {"number": 1, "name": "Thodupuzha Town Ward", "lat": 9.8950, "lng": 76.7180},
+                    {"number": 2, "name": "Vengalloor Ward", "lat": 9.9020, "lng": 76.7250},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-KNR",
+        "name": "Kannur",
+        "state": "Kerala",
+        "lat": 11.8745,
+        "lng": 75.3704,
+        "local_bodies": [
+            {
+                "name": "Kannur Municipal Corporation",
+                "type": "Corporation",
+                "lat": 11.8745,
+                "lng": 75.3704,
+                "wards": [
+                    {"number": 1, "name": "Camp Bazaar Ward", "lat": 11.8720, "lng": 75.3710},
+                    {"number": 2, "name": "Payyambalam Ward", "lat": 11.8680, "lng": 75.3580},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-KSD",
+        "name": "Kasaragod",
+        "state": "Kerala",
+        "lat": 12.5102,
+        "lng": 74.9852,
+        "local_bodies": [
+            {
+                "name": "Kasaragod Municipality",
+                "type": "Municipality",
+                "lat": 12.5102,
+                "lng": 74.9852,
+                "wards": [
+                    {"number": 1, "name": "Kasaragod Town Ward", "lat": 12.5090, "lng": 74.9860},
+                    {"number": 2, "name": "Vidyanagar Ward", "lat": 12.5180, "lng": 75.0020},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-KLM",
+        "name": "Kollam",
+        "state": "Kerala",
+        "lat": 8.8932,
+        "lng": 76.6141,
+        "local_bodies": [
+            {
+                "name": "Kollam Municipal Corporation",
+                "type": "Corporation",
+                "lat": 8.8932,
+                "lng": 76.6141,
+                "wards": [
+                    {"number": 1, "name": "Chinnakada Ward", "lat": 8.8880, "lng": 76.5910},
+                    {"number": 2, "name": "Asramam Ward", "lat": 8.9010, "lng": 76.6020},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-KTM",
+        "name": "Kottayam",
+        "state": "Kerala",
+        "lat": 9.5916,
+        "lng": 76.5222,
+        "local_bodies": [
+            {
+                "name": "Kottayam Municipality",
+                "type": "Municipality",
+                "lat": 9.5916,
+                "lng": 76.5222,
+                "wards": [
+                    {"number": 1, "name": "Thirunakkara Ward", "lat": 9.5900, "lng": 76.5210},
+                    {"number": 2, "name": "Nagampadam Ward", "lat": 9.6010, "lng": 76.5310},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-KKD",
+        "name": "Kozhikode",
+        "state": "Kerala",
+        "lat": 11.2588,
+        "lng": 75.7804,
+        "local_bodies": [
+            {
+                "name": "Kozhikode Municipal Corporation",
+                "type": "Corporation",
+                "lat": 11.2500,
+                "lng": 75.7700,
+                "wards": [
+                    {"number": 7, "name": "Mananchira Ward", "lat": 11.2540, "lng": 75.7820},
+                    {"number": 8, "name": "Palayam Ward (Kozhikode)", "lat": 11.2510, "lng": 75.7840},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-MLP",
+        "name": "Malappuram",
+        "state": "Kerala",
+        "lat": 11.0735,
+        "lng": 76.0740,
+        "local_bodies": [
+            {
+                "name": "Malappuram Municipality",
+                "type": "Municipality",
+                "lat": 11.0735,
+                "lng": 76.0740,
+                "wards": [
+                    {"number": 1, "name": "Down Hill Ward", "lat": 11.0680, "lng": 76.0690},
+                    {"number": 2, "name": "Up Hill Ward", "lat": 11.0760, "lng": 76.0790},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-PKD",
+        "name": "Palakkad",
+        "state": "Kerala",
+        "lat": 10.7867,
+        "lng": 76.6548,
+        "local_bodies": [
+            {
+                "name": "Palakkad Municipality",
+                "type": "Municipality",
+                "lat": 10.7867,
+                "lng": 76.6548,
+                "wards": [
+                    {"number": 1, "name": "Fort Maidan Ward", "lat": 10.7710, "lng": 76.6550},
+                    {"number": 2, "name": "Sulthanpet Ward", "lat": 10.7780, "lng": 76.6520},
+                ],
+            }
+        ],
+    },
+    {
+        "code": "KL-PTA",
+        "name": "Pathanamthitta",
+        "state": "Kerala",
+        "lat": 9.2648,
+        "lng": 76.7870,
+        "local_bodies": [
+            {
+                "name": "Pathanamthitta Municipality",
+                "type": "Municipality",
+                "lat": 9.2648,
+                "lng": 76.7870,
+                "wards": [
+                    {"number": 1, "name": "Pathanamthitta Town Ward", "lat": 9.2630, "lng": 76.7860},
+                    {"number": 2, "name": "Kumbazha Ward", "lat": 9.2690, "lng": 76.8010},
+                ],
+            }
+        ],
+    },
     {
         "code": "KL-TVM",
         "name": "Thiruvananthapuram",
@@ -139,209 +357,62 @@ SYNTHETIC_DISTRICTS = [
         ],
     },
     {
-        "code": "KL-EKM",
-        "name": "Ernakulam",
+        "code": "KL-TCR",
+        "name": "Thrissur",
         "state": "Kerala",
-        "lat": 9.9816,
-        "lng": 76.2999,
+        "lat": 10.5276,
+        "lng": 76.2144,
         "local_bodies": [
             {
-                "name": "Kochi Municipal Corporation",
+                "name": "Thrissur Municipal Corporation",
                 "type": "Corporation",
-                "lat": 9.9675,
-                "lng": 76.2422,
+                "lat": 10.5276,
+                "lng": 76.2144,
                 "wards": [
-                    {"number": 5, "name": "Marine Drive Ward", "lat": 9.9780, "lng": 76.2750},
-                    {"number": 6, "name": "Edappally Ward", "lat": 10.0240, "lng": 76.3080},
+                    {"number": 1, "name": "Swaraj Round Ward", "lat": 10.5240, "lng": 76.2140},
+                    {"number": 2, "name": "Ayyanthole Ward", "lat": 10.5310, "lng": 76.1950},
                 ],
             }
         ],
     },
     {
-        "code": "KL-KKD",
-        "name": "Kozhikode",
+        "code": "KL-WYD",
+        "name": "Wayanad",
         "state": "Kerala",
-        "lat": 11.2588,
-        "lng": 75.7804,
+        "lat": 11.6854,
+        "lng": 76.1320,
         "local_bodies": [
             {
-                "name": "Kozhikode Municipal Corporation",
-                "type": "Corporation",
-                "lat": 11.2500,
-                "lng": 75.7700,
+                "name": "Kalpetta Municipality",
+                "type": "Municipality",
+                "lat": 11.6050,
+                "lng": 76.0830,
                 "wards": [
-                    {"number": 7, "name": "Mananchira Ward", "lat": 11.2540, "lng": 75.7820},
+                    {"number": 1, "name": "Kalpetta Town Ward", "lat": 11.6040, "lng": 76.0820},
+                    {"number": 2, "name": "Madiyur Ward", "lat": 11.6110, "lng": 76.0910},
                 ],
             }
         ],
     },
 ]
 
-# Synthetic patient records
+# Monitored Patient Registry (Single Patient)
 SYNTHETIC_PATIENTS = [
     {
-        "pseudo_id": "PAT-SYNTH-101",
-        "user_email": "patient.synth101@healthwatch.org",
+        "pseudo_id": "PAT-USER-143",
+        "user_email": "alana@healthwatch.org",
         "assigned_worker_email": "worker.field01@healthwatch.org",
-        "full_name": "Synthetic Patient 101",
-        "age": 34,
-        "gender": "MALE",
-        "contact_number": "+1-555-0192",
-        "address": "104 Maple Street, Palayam",
-        "district_name": "Thiruvananthapuram",
-        "local_body_name": "Thiruvananthapuram Municipal Corporation",
-        "ward_number": 1,
-    },
-    {
-        "pseudo_id": "PAT-SYNTH-102",
-        "user_email": None,
-        "assigned_worker_email": "worker.field01@healthwatch.org",
-        "full_name": "Synthetic Patient 102",
-        "age": 28,
+        "full_name": "Alana P J",
+        "age": 21,
         "gender": "FEMALE",
-        "contact_number": "+1-555-0144",
-        "address": "72 South Boulevard, Medical College",
-        "district_name": "Thiruvananthapuram",
-        "local_body_name": "Thiruvananthapuram Municipal Corporation",
-        "ward_number": 2,
+        "has_phone": True,
+        "contact_number": "8136963623",
+        "disease_code": "DENGUE-01",
+        "address": "PULIKKOTTIL HOUSE, PADIVARAMBU, ELAVALLY",
+        "district_name": "Thrissur",
+        "local_body_name": "Elavally Grama Panchayat",
+        "ward_number": 17,
     },
-    {
-        "pseudo_id": "PAT-SYNTH-103",
-        "user_email": None,
-        "full_name": "Synthetic Patient 103",
-        "age": 45,
-        "gender": "MALE",
-        "contact_number": "+1-555-0188",
-        "address": "12 Harbour Road, Marine Drive",
-        "district_name": "Ernakulam",
-        "local_body_name": "Kochi Municipal Corporation",
-        "ward_number": 5,
-    },
-    {
-        "pseudo_id": "PAT-SYNTH-104",
-        "user_email": None,
-        "full_name": "Synthetic Patient 104",
-        "age": 62,
-        "gender": "FEMALE",
-        "contact_number": "+1-555-0129",
-        "address": "408 Westside Avenue, Pattom",
-        "district_name": "Thiruvananthapuram",
-        "local_body_name": "Thiruvananthapuram Municipal Corporation",
-        "ward_number": 4,
-    },
-    # Additional Synthetic Demo Cohort for Disease Hotspot Heatmap (Step 15)
-    # Palayam Ward (Hotspot Outbreak Zone: 10 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-20{i}",
-            "user_email": None,
-            "full_name": f"Demo Cluster Patient 20{i}",
-            "age": 20 + (i * 4) % 50,
-            "gender": "MALE" if i % 2 == 0 else "FEMALE",
-            "contact_number": f"+1-555-020{i}",
-            "address": f"Palayam Cluster Residence #{i}, MG Road",
-            "district_name": "Thiruvananthapuram",
-            "local_body_name": "Thiruvananthapuram Municipal Corporation",
-            "ward_number": 1,
-        }
-        for i in range(1, 11)
-    ],
-    # Medical College Ward (High Concentration: 5 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-21{i}",
-            "user_email": None,
-            "full_name": f"Demo Patient 21{i}",
-            "age": 25 + (i * 5) % 45,
-            "gender": "FEMALE" if i % 2 == 0 else "MALE",
-            "contact_number": f"+1-555-021{i}",
-            "address": f"Medical College Enclave Block {i}",
-            "district_name": "Thiruvananthapuram",
-            "local_body_name": "Thiruvananthapuram Municipal Corporation",
-            "ward_number": 2,
-        }
-        for i in range(1, 6)
-    ],
-    # Pattom Ward (High Concentration: 5 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-21{i+5}",
-            "user_email": None,
-            "full_name": f"Demo Patient 21{i+5}",
-            "age": 30 + (i * 3) % 40,
-            "gender": "MALE" if i % 2 == 0 else "FEMALE",
-            "contact_number": f"+1-555-021{i+5}",
-            "address": f"Pattom Sector {i} Lane",
-            "district_name": "Thiruvananthapuram",
-            "local_body_name": "Thiruvananthapuram Municipal Corporation",
-            "ward_number": 4,
-        }
-        for i in range(1, 6)
-    ],
-    # Kazhakkoottam Ward (Moderate Concentration: 3 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-22{i}",
-            "user_email": None,
-            "full_name": f"Demo Patient 22{i}",
-            "age": 28 + (i * 2),
-            "gender": "MALE",
-            "contact_number": f"+1-555-022{i}",
-            "address": f"Technopark Campus Ward #{i}",
-            "district_name": "Thiruvananthapuram",
-            "local_body_name": "Thiruvananthapuram Municipal Corporation",
-            "ward_number": 3,
-        }
-        for i in range(1, 4)
-    ],
-    # Marine Drive Ward (Moderate Concentration: 3 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-22{i+3}",
-            "user_email": None,
-            "full_name": f"Demo Patient 22{i+3}",
-            "age": 35 + (i * 6),
-            "gender": "FEMALE",
-            "contact_number": f"+1-555-022{i+3}",
-            "address": f"Marine Drive Waterfront Tower #{i}",
-            "district_name": "Ernakulam",
-            "local_body_name": "Kochi Municipal Corporation",
-            "ward_number": 5,
-        }
-        for i in range(1, 4)
-    ],
-    # Edappally Ward (Low Concentration: 2 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-22{i+6}",
-            "user_email": None,
-            "full_name": f"Demo Patient 22{i+6}",
-            "age": 22 + (i * 10),
-            "gender": "MALE",
-            "contact_number": f"+1-555-022{i+6}",
-            "address": f"Edappally Junction Area #{i}",
-            "district_name": "Ernakulam",
-            "local_body_name": "Kochi Municipal Corporation",
-            "ward_number": 6,
-        }
-        for i in range(1, 3)
-    ],
-    # Mananchira Ward (Low Concentration: 2 demo patients)
-    *[
-        {
-            "pseudo_id": f"PAT-DEMO-22{i+8}",
-            "user_email": None,
-            "full_name": f"Demo Patient 22{i+8}",
-            "age": 40 + (i * 7),
-            "gender": "FEMALE",
-            "contact_number": f"+1-555-022{i+8}",
-            "address": f"Mananchira Square #{i}",
-            "district_name": "Kozhikode",
-            "local_body_name": "Kozhikode Municipal Corporation",
-            "ward_number": 7,
-        }
-        for i in range(1, 3)
-    ],
 ]
 
 
@@ -354,14 +425,19 @@ def sync_schema_columns(conn) -> None:
         "ALTER TABLE districts ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'SIMULATED';",
         
         # Local body spatial columns
+        "ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS code VARCHAR(50);",
         "ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS center_latitude FLOAT;",
         "ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS center_longitude FLOAT;",
-        "ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'SIMULATED';",
+        "ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'OFFICIAL_SEC';",
+        "CREATE INDEX IF NOT EXISTS ix_local_bodies_code ON local_bodies(code);",
         
         # Ward spatial columns
+        "ALTER TABLE wards ADD COLUMN IF NOT EXISTS ward_code VARCHAR(50);",
         "ALTER TABLE wards ADD COLUMN IF NOT EXISTS center_latitude FLOAT;",
         "ALTER TABLE wards ADD COLUMN IF NOT EXISTS center_longitude FLOAT;",
-        "ALTER TABLE wards ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'SIMULATED';",
+        "ALTER TABLE wards ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'OFFICIAL_SEC';",
+        "CREATE INDEX IF NOT EXISTS ix_wards_ward_code ON wards(ward_code);",
+        "CREATE INDEX IF NOT EXISTS ix_wards_lb_wn ON wards(local_body_id, ward_number);",
         
         # Disease case spatial columns
         "ALTER TABLE disease_cases ADD COLUMN IF NOT EXISTS ward_id UUID REFERENCES wards(id) ON DELETE SET NULL;",
@@ -401,8 +477,12 @@ def sync_schema_columns(conn) -> None:
         "UPDATE patient_locations SET accuracy = accuracy_meters WHERE accuracy IS NULL;",
         "UPDATE patient_locations SET location_geography = location::geography WHERE location_geography IS NULL AND location IS NOT NULL;",
 
-        # Patient assigned health worker column
+        # Patient assigned health worker column, phone status, and disease linkage
         "ALTER TABLE patients ADD COLUMN IF NOT EXISTS assigned_worker_id UUID REFERENCES users(id) ON DELETE SET NULL;",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS has_phone BOOLEAN DEFAULT TRUE;",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS disease_id UUID REFERENCES diseases(id) ON DELETE SET NULL;",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS disease_name VARCHAR(100);",
+        "ALTER TABLE monitoring_sessions ADD COLUMN IF NOT EXISTS sampling_interval_minutes INTEGER DEFAULT 15;",
 
         # Exposure Events columns (Step 16)
         "ALTER TABLE exposure_events ADD COLUMN IF NOT EXISTS patient_a_id UUID REFERENCES patients(id) ON DELETE CASCADE;",
@@ -495,85 +575,32 @@ def init_db(db: Session = None) -> None:
                 else:
                     user.hashed_password = get_password_hash(u_data["password"])
                     user.role_id = role_obj.id if role_obj else user.role_id
+                    user.is_active = True
                     db.flush()
                 user_map[user.email] = user
             db.commit()
 
-            # 3. Seed Synthetic Spatial Hierarchy (Kerala -> District -> LocalBody -> Ward)
+            # 3. Seed Spatial Hierarchy (Kerala -> District -> LocalBody -> Ward)
             district_map = {}
             ward_map = {}
 
-            for dist_data in SYNTHETIC_DISTRICTS:
-                district = db.query(District).filter(District.code == dist_data["code"]).first()
-                dist_geom_wkt = make_synthetic_polygon(dist_data["lng"], dist_data["lat"], radius=0.08)
-                
-                if not district:
-                    district = District(
-                        code=dist_data["code"],
-                        name=dist_data["name"],
-                        state=dist_data["state"],
-                        center_latitude=dist_data["lat"],
-                        center_longitude=dist_data["lng"],
-                        source="SIMULATED",
-                    )
-                    db.add(district)
-                    db.flush()
-                    db.execute(
-                        text("UPDATE districts SET boundary = ST_SetSRID(ST_GeomFromText(:wkt), 4326) WHERE id = :id"),
-                        {"wkt": dist_geom_wkt, "id": str(district.id)},
-                    )
-                district_map[district.code] = district
+            # Check if official wards are already imported
+            official_ward_count = db.query(Ward).filter(Ward.source == "OFFICIAL_SEC").count()
+            if official_ward_count < 20000:
+                logger.info(f"Official wards count is {official_ward_count}. Importing full official dataset...")
+                try:
+                    from app.scripts.import_official_kerala_wards import import_official_wards
+                    import_official_wards()
+                except Exception as e:
+                    logger.warning(f"Could not import official wards script directly: {e}")
 
-                for lb_data in dist_data["local_bodies"]:
-                    lb = db.query(LocalBody).filter(
-                        LocalBody.district_id == district.id,
-                        LocalBody.name == lb_data["name"],
-                    ).first()
-                    lb_geom_wkt = make_synthetic_polygon(lb_data["lng"], lb_data["lat"], radius=0.03)
+            for d in db.query(District).all():
+                district_map[d.code] = d
+                district_map[d.name] = d
 
-                    if not lb:
-                        lb = LocalBody(
-                            district_id=district.id,
-                            name=lb_data["name"],
-                            body_type=lb_data["type"],
-                            center_latitude=lb_data["lat"],
-                            center_longitude=lb_data["lng"],
-                            source="SIMULATED",
-                        )
-                        db.add(lb)
-                        db.flush()
-                        db.execute(
-                            text("UPDATE local_bodies SET boundary = ST_SetSRID(ST_GeomFromText(:wkt), 4326) WHERE id = :id"),
-                            {"wkt": lb_geom_wkt, "id": str(lb.id)},
-                        )
+            for w in db.query(Ward).limit(500).all():
+                ward_map[w.name] = w
 
-                    for w_data in lb_data["wards"]:
-                        ward = db.query(Ward).filter(
-                            Ward.local_body_id == lb.id,
-                            Ward.name == w_data["name"],
-                        ).first()
-                        w_geom_wkt = make_synthetic_polygon(w_data["lng"], w_data["lat"], radius=0.01)
-
-                        if not ward:
-                            ward = Ward(
-                                local_body_id=lb.id,
-                                ward_number=w_data["number"],
-                                name=w_data["name"],
-                                center_latitude=w_data["lat"],
-                                center_longitude=w_data["lng"],
-                                source="SIMULATED",
-                            )
-                            db.add(ward)
-                            db.flush()
-                            db.execute(
-                                text("UPDATE wards SET boundary = ST_SetSRID(ST_GeomFromText(:wkt), 4326) WHERE id = :id"),
-                                {"wkt": w_geom_wkt, "id": str(ward.id)},
-                            )
-                        # Unique mappings
-                        ward_map[f"{dist_data['name']}:{w_data['name']}"] = ward
-                        ward_map[w_data["name"]] = ward
-
-            db.commit()
 
             # 4. Seed Synthetic Diseases
             disease_map = {}
@@ -595,13 +622,18 @@ def init_db(db: Session = None) -> None:
                 disease_map[disease.code] = disease
             db.commit()
 
-            # 5. Seed Synthetic Patients
+            # 5. Seed Patient Registry (Single Patient)
             patient_map = {}
             for p_data in SYNTHETIC_PATIENTS:
                 patient = db.query(Patient).filter(Patient.pseudo_id == p_data["pseudo_id"]).first()
                 linked_user = user_map.get(p_data["user_email"]) if p_data.get("user_email") else None
                 assigned_worker = user_map.get(p_data.get("assigned_worker_email")) if p_data.get("assigned_worker_email") else None
                 assigned_worker_id = assigned_worker.id if assigned_worker else None
+
+                thrissur = db.query(District).filter(District.name == "Thrissur").first()
+                elavally = db.query(LocalBody).filter(LocalBody.code == "G08037").first() or db.query(LocalBody).filter(LocalBody.name.ilike("%Elavally%")).first()
+                ward_17 = db.query(Ward).filter(Ward.ward_code == "G08037017").first() or (db.query(Ward).filter(Ward.local_body_id == elavally.id, Ward.ward_number == 17).first() if elavally else None)
+                assigned_disease = disease_map.get(p_data.get("disease_code", "DENGUE-01"))
 
                 if not patient:
                     patient = Patient(
@@ -611,186 +643,74 @@ def init_db(db: Session = None) -> None:
                         full_name=p_data["full_name"],
                         age=p_data["age"],
                         gender=p_data["gender"],
+                        has_phone=p_data.get("has_phone", True),
                         contact_number=p_data["contact_number"],
+                        disease_id=assigned_disease.id if assigned_disease else None,
+                        disease_name=assigned_disease.name if assigned_disease else None,
                         address=p_data["address"],
                         district_name=p_data["district_name"],
                         local_body_name=p_data["local_body_name"],
                         ward_number=p_data["ward_number"],
+                        district_id=thrissur.id if thrissur else None,
+                        local_body_id=elavally.id if elavally else None,
+                        ward_id=ward_17.id if ward_17 else None,
                         is_active=True,
                     )
                     db.add(patient)
                     db.flush()
                 else:
                     patient.assigned_worker_id = assigned_worker_id
+                    patient.has_phone = p_data.get("has_phone", True)
+                    patient.contact_number = p_data["contact_number"]
+                    if assigned_disease:
+                        patient.disease_id = assigned_disease.id
+                        patient.disease_name = assigned_disease.name
+                    if linked_user and not patient.user_id:
+                        patient.user_id = linked_user.id
+                    if thrissur and not patient.district_id:
+                        patient.district_id = thrissur.id
+                    if elavally and not patient.local_body_id:
+                        patient.local_body_id = elavally.id
+                    if ward_17 and not patient.ward_id:
+                        patient.ward_id = ward_17.id
+                    patient.is_active = True
                     db.flush()
+
+                # Ensure a DiseaseCase exists for this patient
+                if assigned_disease:
+                    d_case = db.query(DiseaseCase).filter(
+                        DiseaseCase.patient_id == patient.id,
+                        DiseaseCase.disease_id == assigned_disease.id
+                    ).first()
+                    lat = ward_17.center_latitude if ward_17 and ward_17.center_latitude else 10.5833
+                    lng = ward_17.center_longitude if ward_17 and ward_17.center_longitude else 76.0833
+                    if not d_case:
+                        d_case = DiseaseCase(
+                            patient_id=patient.id,
+                            disease_id=assigned_disease.id,
+                            ward_id=ward_17.id if ward_17 else None,
+                            case_status=CaseStatus.CONFIRMED.value,
+                            severity="MODERATE",
+                            diagnosis_date=datetime.date.today(),
+                            latitude=lat,
+                            longitude=lng,
+                            source="SURVEILLANCE",
+                            clinical_notes="Registered clinical case under active surveillance.",
+                        )
+                        db.add(d_case)
+                        db.flush()
+                    else:
+                        d_case.ward_id = ward_17.id if ward_17 else d_case.ward_id
+                        d_case.latitude = lat
+                        d_case.longitude = lng
+                        db.flush()
+
                 patient_map[patient.pseudo_id] = patient
             db.commit()
 
             # 6. Seed Synthetic Disease Cases with Spatial Point Geography
             officer_user = user_map.get("officer.surveillance@healthwatch.org")
-            
-            case_definitions = [
-                {
-                    "patient_pseudo": "PAT-SYNTH-101",
-                    "disease_code": "DENGUE-01",
-                    "status": CaseStatus.CONFIRMED.value,
-                    "severity": "MODERATE",
-                    "district": "Thiruvananthapuram",
-                    "ward_name": "Palayam Ward",
-                    "lat": 8.5025,
-                    "lng": 76.9515,
-                    "notes": "Patient presented with fever and joint pain in Palayam Ward.",
-                },
-                {
-                    "patient_pseudo": "PAT-SYNTH-102",
-                    "disease_code": "COVID-19",
-                    "status": CaseStatus.SUSPECTED.value,
-                    "severity": "MILD",
-                    "district": "Thiruvananthapuram",
-                    "ward_name": "Medical College Ward",
-                    "lat": 8.5245,
-                    "lng": 76.9285,
-                    "notes": "Mild sore throat and low-grade fever near Medical College Ward.",
-                },
-                {
-                    "patient_pseudo": "PAT-SYNTH-103",
-                    "disease_code": "CHOLERA-01",
-                    "status": CaseStatus.RECOVERED.value,
-                    "severity": "SEVERE",
-                    "district": "Ernakulam",
-                    "ward_name": "Marine Drive Ward",
-                    "lat": 9.9785,
-                    "lng": 76.2755,
-                    "notes": "Marine Drive acute gastroenteritis incident. Full recovery reported.",
-                },
-                {
-                    "patient_pseudo": "PAT-SYNTH-104",
-                    "disease_code": "DENGUE-01",
-                    "status": CaseStatus.CONFIRMED.value,
-                    "severity": "CRITICAL",
-                    "district": "Thiruvananthapuram",
-                    "ward_name": "Pattom Ward",
-                    "lat": 8.5295,
-                    "lng": 76.9425,
-                    "diagnosis_date": datetime.date.today() - datetime.timedelta(days=1),
-                    "notes": "Severe dengue cluster incident in Pattom Ward.",
-                },
-                # Palayam Ward Dengue Hotspot Cluster (10 cases -> Total 11 cases in Palayam)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-20{i}",
-                        "disease_code": "DENGUE-01",
-                        "status": (
-                            CaseStatus.CONFIRMED.value if i <= 7
-                            else (CaseStatus.SUSPECTED.value if i <= 9 else CaseStatus.RECOVERED.value)
-                        ),
-                        "severity": "CRITICAL" if i in [1, 2] else ("SEVERE" if i in [3, 4] else "MODERATE"),
-                        "district": "Thiruvananthapuram",
-                        "ward_name": "Palayam Ward",
-                        "lat": 8.5025 + ((i % 3 - 1) * 0.0006),
-                        "lng": 76.9515 + (((i // 3) - 1) * 0.0006),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i % 5)),
-                        "notes": f"Palayam urban dengue surveillance cluster incident #{i}.",
-                    }
-                    for i in range(1, 11)
-                ],
-                # Medical College Ward (High Concentration: 5 cases -> Total 6 cases)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-21{i}",
-                        "disease_code": "COVID-19" if i <= 3 else "DENGUE-01",
-                        "status": CaseStatus.CONFIRMED.value if i <= 3 else (CaseStatus.SUSPECTED.value if i == 4 else CaseStatus.RECOVERED.value),
-                        "severity": "MODERATE" if i <= 3 else "MILD",
-                        "district": "Thiruvananthapuram",
-                        "ward_name": "Medical College Ward",
-                        "lat": 8.5245 + ((i % 3 - 1) * 0.0005),
-                        "lng": 76.9285 + (((i // 2) - 1) * 0.0005),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i + 1)),
-                        "notes": f"Medical College surveillance incident #{i}.",
-                    }
-                    for i in range(1, 6)
-                ],
-                # Pattom Ward (High Concentration: 5 cases -> Total 6 cases)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-21{i+5}",
-                        "disease_code": "DENGUE-01",
-                        "status": CaseStatus.CONFIRMED.value if i <= 3 else (CaseStatus.SUSPECTED.value if i == 4 else CaseStatus.RECOVERED.value),
-                        "severity": "SEVERE" if i <= 2 else "MODERATE",
-                        "district": "Thiruvananthapuram",
-                        "ward_name": "Pattom Ward",
-                        "lat": 8.5295 + ((i % 3 - 1) * 0.0005),
-                        "lng": 76.9425 + (((i // 2) - 1) * 0.0005),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i + 2)),
-                        "notes": f"Pattom dengue secondary cluster incident #{i}.",
-                    }
-                    for i in range(1, 6)
-                ],
-                # Kazhakkoottam Ward (Moderate Concentration: 3 cases)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-22{i}",
-                        "disease_code": "COVID-19",
-                        "status": CaseStatus.CONFIRMED.value if i <= 2 else CaseStatus.RECOVERED.value,
-                        "severity": "MODERATE" if i == 1 else "MILD",
-                        "district": "Thiruvananthapuram",
-                        "ward_name": "Fort Ward",
-                        "lat": 8.4830 + (i * 0.0008),
-                        "lng": 76.9520 + (i * 0.0008),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i + 3)),
-                        "notes": f"Kazhakkoottam/TVM peripheral cluster incident #{i}.",
-                    }
-                    for i in range(1, 4)
-                ],
-                # Marine Drive Ward (Moderate Concentration: 3 cases -> Total 4 cases)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-22{i+3}",
-                        "disease_code": "CHOLERA-01",
-                        "status": CaseStatus.CONFIRMED.value if i <= 2 else CaseStatus.SUSPECTED.value,
-                        "severity": "SEVERE" if i == 1 else "MODERATE",
-                        "district": "Ernakulam",
-                        "ward_name": "Marine Drive Ward",
-                        "lat": 9.9785 + ((i - 2) * 0.0005),
-                        "lng": 76.2755 + ((i - 2) * 0.0005),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i + 1)),
-                        "notes": f"Marine Drive waterborne outbreak investigation incident #{i}.",
-                    }
-                    for i in range(1, 4)
-                ],
-                # Edappally Ward (Low Concentration: 2 cases)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-22{i+6}",
-                        "disease_code": "COVID-19",
-                        "status": CaseStatus.CONFIRMED.value if i == 1 else CaseStatus.RECOVERED.value,
-                        "severity": "MILD",
-                        "district": "Ernakulam",
-                        "ward_name": "Edappally Ward",
-                        "lat": 10.0240 + (i * 0.0004),
-                        "lng": 76.3080 + (i * 0.0004),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i + 4)),
-                        "notes": f"Edappally isolated transmission observation #{i}.",
-                    }
-                    for i in range(1, 3)
-                ],
-                # Mananchira Ward (Low Concentration: 2 cases)
-                *[
-                    {
-                        "patient_pseudo": f"PAT-DEMO-22{i+8}",
-                        "disease_code": "CHOLERA-01",
-                        "status": CaseStatus.CONFIRMED.value if i == 1 else CaseStatus.RECOVERED.value,
-                        "severity": "MODERATE" if i == 1 else "MILD",
-                        "district": "Kozhikode",
-                        "ward_name": "Mananchira Ward",
-                        "lat": 11.2540 + (i * 0.0004),
-                        "lng": 75.7820 + (i * 0.0004),
-                        "diagnosis_date": datetime.date.today() - datetime.timedelta(days=(i + 5)),
-                        "notes": f"Kozhikode surveillance case incident #{i}.",
-                    }
-                    for i in range(1, 3)
-                ],
-            ]
+            case_definitions = []
 
             # Reset simulated cases for idempotent heatmap tier evaluation
             db.query(DiseaseCase).filter(DiseaseCase.source == "SIMULATED").delete()
@@ -971,8 +891,55 @@ def seed_synthetic_roadmap(db: Session):
     db.commit()
     logger.info("Synthetic Movement Roadmap route (Points A, B, C, D, E) seeded for PAT-SYNTH-101.")
 
+    # Seed test patient active consent and monitoring sessions
+    seed_test_patient_sessions(db)
+
     # 13. Seed Synthetic Potential Spatial-Temporal Exposures (Step 16)
     seed_spatial_temporal_exposures(db)
+
+
+def seed_test_patient_sessions(db: Session) -> None:
+    """Ensure personal patient (PAT-USER-143) has active consent and monitoring sessions."""
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    for pseudo in ["PAT-USER-143"]:
+        patient = db.query(Patient).filter(Patient.pseudo_id == pseudo).first()
+        if not patient:
+            continue
+
+        consent = db.query(LocationConsent).filter(LocationConsent.patient_id == patient.id).first()
+        if not consent:
+            consent = LocationConsent(
+                patient_id=patient.id,
+                consent_status="ACTIVE",
+                consent_given_at=now_utc,
+                monitoring_start=now_utc - datetime.timedelta(hours=1),
+                monitoring_end=now_utc + datetime.timedelta(days=14),
+                purpose="Authorized Quarantine Compliance & Outbreak Contact Surveillance (approx. every 15 mins)",
+            )
+            db.add(consent)
+            db.flush()
+        else:
+            consent.consent_status = "ACTIVE"
+            consent.monitoring_end = now_utc + datetime.timedelta(days=14)
+            db.flush()
+
+        session = db.query(MonitoringSession).filter(MonitoringSession.patient_id == patient.id).first()
+        if not session:
+            session = MonitoringSession(
+                patient_id=patient.id,
+                consent_id=consent.id,
+                start_time=now_utc - datetime.timedelta(hours=1),
+                end_time=now_utc + datetime.timedelta(days=14),
+                status="ACTIVE",
+            )
+            db.add(session)
+            db.flush()
+        else:
+            session.status = "ACTIVE"
+            session.end_time = now_utc + datetime.timedelta(days=14)
+            db.flush()
+    db.commit()
+    logger.info("Active consent and monitoring sessions verified for test patients PAT-TEST-001 and PAT-USER-143.")
 
 
 def seed_spatial_temporal_exposures(db: Session) -> None:

@@ -59,6 +59,7 @@ class SessionStartRequest(BaseModel):
     start_time: Optional[datetime.datetime] = Field(None, description="Session start date/time")
     end_time: Optional[datetime.datetime] = Field(None, description="Session end date/time")
     duration_hours: int = Field(default=24, ge=1, le=336, description="Monitoring session duration in hours")
+    sampling_interval_minutes: Optional[int] = Field(default=15, description="Officer/system selected sampling cadence in minutes (1, 5, 10, 15, 30, 60)")
 
 
 class SessionStopRequest(BaseModel):
@@ -75,6 +76,7 @@ class SessionResponse(BaseModel):
     end_time: datetime.datetime
     status: SessionStatusEnum
     stopped_at: Optional[datetime.datetime] = None
+    sampling_interval_minutes: int = 15
     sampling_interval_seconds: int = 900
     sampling_interval_description: str = "Approximately 15 minutes"
     created_at: datetime.datetime

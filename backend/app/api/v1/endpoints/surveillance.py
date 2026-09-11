@@ -277,10 +277,14 @@ def get_surveillance_dashboard(
             lat = c.ward.center_latitude
             lng = c.ward.center_longitude
 
-        # Default to Kerala center if still null
+        # Fallback to patient ward or district centroid if available
+        if (lat is None or lng is None) and c.patient and c.patient.ward:
+            lat = c.patient.ward.center_latitude
+            lng = c.patient.ward.center_longitude
+
+        # Do not fabricate Trivandrum coordinates for cases without spatial data
         if lat is None or lng is None:
-            lat = 8.5241
-            lng = 76.9366
+            continue
 
         w_name = c.ward.name if c.ward else (f"Ward {c.patient.ward_number}" if c.patient else "Surveillance Ward")
         dist_name = (
@@ -321,8 +325,8 @@ def get_surveillance_dashboard(
             DashboardDistrictMapItem(
                 id=str(d.id),
                 name=d.name,
-                latitude=float(d.center_latitude or 8.5241),
-                longitude=float(d.center_longitude or 76.9366),
+                latitude=float(d.center_latitude) if d.center_latitude is not None else 0.0,
+                longitude=float(d.center_longitude) if d.center_longitude is not None else 0.0,
                 case_count=len(d_cases),
                 active_count=d_active,
             )

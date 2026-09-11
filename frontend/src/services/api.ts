@@ -600,10 +600,11 @@ export const fetchPatientsList = async (
   wardId?: string,
   isActive?: boolean,
   diseaseId?: string,
-  hasPhone?: boolean
+  hasPhone?: boolean,
+  limit: number = 200
 ): Promise<{ total: number; items: PatientProfile[] }> => {
   const auth = await getOfficerAuthHeader();
-  const queryParams: Record<string, any> = {};
+  const queryParams: Record<string, any> = { limit };
   if (q) queryParams.q = q;
   if (districtName) queryParams.district_name = districtName;
   if (wardNumber !== undefined) queryParams.ward_number = wardNumber;
@@ -632,6 +633,9 @@ export const createPatientRecord = async (
     gender: string;
     has_phone?: boolean;
     contact_number?: string | null;
+    date_of_birth?: string | null;
+    tracking_interval_minutes?: number;
+    tracking_days?: string;
     disease_id?: string;
     disease_name?: string;
     address: string;
@@ -665,6 +669,9 @@ export const updatePatientRecord = async (
     gender: string;
     has_phone: boolean;
     contact_number: string | null;
+    date_of_birth: string | null;
+    tracking_interval_minutes: number;
+    tracking_days: string;
     disease_id: string | null;
     disease_name: string | null;
     address: string;

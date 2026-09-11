@@ -351,6 +351,9 @@ def list_wards(
     )
     if local_body_id:
         query = query.filter(Ward.local_body_id == local_body_id)
+        has_official = db.query(Ward.id).filter(Ward.local_body_id == local_body_id, Ward.ward_code.isnot(None)).first()
+        if has_official:
+            query = query.filter(Ward.ward_code.isnot(None))
     
     if q and q.strip():
         search_term = q.strip()
@@ -534,8 +537,14 @@ def get_gis_cases(
     results: List[CaseLocationPoint] = []
 
     for c in cases:
-        lat = c.latitude or (c.ward.center_latitude if c.ward else 8.5241)
-        lng = c.longitude or (c.ward.center_longitude if c.ward else 76.9366)
+        lat = c.latitude or (c.ward.center_latitude if c.ward else None)
+        lng = c.longitude or (c.ward.center_longitude if c.ward else None)
+        if (lat is None or lng is None) and c.patient and c.patient.ward:
+            lat = c.patient.ward.center_latitude
+            lng = c.patient.ward.center_longitude
+
+        if lat is None or lng is None:
+            continue
 
         results.append(
             CaseLocationPoint(
@@ -698,17 +707,22 @@ def get_gis_heatmaps(
             district_name = c.ward.local_body.district.name if (c.ward.local_body and c.ward.local_body.district) else "Kerala"
             local_body_name = c.ward.local_body.name if c.ward.local_body else None
             ward_num = c.ward.ward_number
-            lat = c.ward.center_latitude or 8.5241
-            lng = c.ward.center_longitude or 76.9366
+            lat = c.ward.center_latitude or (c.ward.local_body.district.center_latitude if (c.ward.local_body and c.ward.local_body.district) else None)
+            lng = c.ward.center_longitude or (c.ward.local_body.district.center_longitude if (c.ward.local_body and c.ward.local_body.district) else None)
+        elif c.patient and c.patient.ward:
+            area_key = str(c.patient.ward.id)
+            area_name = c.patient.ward.name
+            district_name = c.patient.district_name or "Kerala"
+            local_body_name = c.patient.local_body_name
+            ward_num = c.patient.ward_number
+            lat = c.patient.ward.center_latitude
+            lng = c.patient.ward.center_longitude
         else:
-            # Fallback to local body or state centroid
-            area_key = "STATE-CLUSTER"
-            area_name = "State Level Observation"
-            district_name = "Kerala"
-            local_body_name = None
-            ward_num = None
-            lat = 8.5241
-            lng = 76.9366
+            # Skip cases without spatial ward reference to avoid falsely plotting in Trivandrum
+            continue
+
+        if lat is None or lng is None:
+            continue
 
         if area_key not in clusters_map:
             clusters_map[area_key] = {

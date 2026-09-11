@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -34,6 +34,13 @@ class Patient(Base):
 
     # Mobile phone status
     has_phone = Column(Boolean, default=True, nullable=False)
+
+    # Date of Birth
+    date_of_birth = Column(DateTime(timezone=True), nullable=True)
+
+    # GPS Monitoring Configuration (Officer-controlled)
+    tracking_interval_minutes = Column(Integer, default=15, nullable=False)
+    tracking_days = Column(String(250), default="Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday", nullable=False)
 
     # Primary Disease classification
     disease_id = Column(UUID(as_uuid=True), ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)

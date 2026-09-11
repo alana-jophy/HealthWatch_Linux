@@ -104,6 +104,9 @@ def login_user(
     else:
         linked_patient = db.query(Patient).filter(Patient.user_id == user.id).first()
 
+    if not linked_patient and user:
+        linked_patient = db.query(Patient).filter(Patient.user_id == user.id).first()
+
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

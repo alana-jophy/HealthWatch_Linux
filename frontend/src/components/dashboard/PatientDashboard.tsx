@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
   fetchMyPatientProfile,
   fetchMyDiseaseCases,
@@ -41,6 +42,7 @@ interface PatientDashboardProps {
 export const PatientDashboard: React.FC<PatientDashboardProps> = ({
   onNavigateToRoadmap,
 }) => {
+  const { user } = useAuth();
   const [profile, setProfile] = useState<PatientProfile | null>(null);
   const [cases, setCases] = useState<PatientDiseaseCase[]>([]);
   const [monitoringStatus, setMonitoringStatus] = useState<PatientMonitoringStatus | null>(null);
@@ -175,7 +177,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
             </div>
 
             <h1 className="font-heading text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-              Welcome, {profile ? profile.full_name : 'Synthetic Patient 101'}
+              Welcome, {profile ? profile.full_name : (user?.full_name || 'Patient')}
             </h1>
 
             <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">
@@ -189,7 +191,7 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               <div className="text-xs">
                 <span className="text-slate-500 block text-[10px] font-mono uppercase">Pseudo ID</span>
                 <span className="font-mono font-bold text-slate-200">
-                  {profile ? profile.pseudo_id : 'PAT-USER-143'}
+                  {profile?.pseudo_id || user?.patient_pseudo_id || '—'}
                 </span>
               </div>
             </div>
@@ -296,8 +298,8 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
           </div>
         </div>
 
-        {/* CARD: My Disease Case */}
-        <div className="glass-panel rounded-2xl p-6 border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-colors">
+        {/* CARD: MY DISEASE DETAILS */}
+        <div id="patient-disease-details-card" className="glass-panel rounded-2xl p-6 border border-slate-800 flex flex-col justify-between hover:border-slate-700 transition-colors">
           <div>
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
@@ -305,68 +307,106 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                   <Activity className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="font-heading text-lg font-bold text-white">My Disease Case</h2>
+                  <h2 className="font-heading text-lg font-bold text-white tracking-wide uppercase">My Disease Details</h2>
                   <p className="text-xs text-slate-400">Surveillance Case Registry</p>
                 </div>
               </div>
 
-              <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border ${
-                primaryCase?.case_status === 'CONFIRMED'
-                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
-                  : primaryCase?.case_status === 'RECOVERED'
-                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-              }`}>
-                {primaryCase?.case_status || 'CONFIRMED'}
-              </span>
+              {primaryCase ? (
+                <span className={`text-[11px] px-2.5 py-1 rounded-full font-semibold border ${
+                  primaryCase.case_status === 'CONFIRMED'
+                    ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                    : primaryCase.case_status === 'RECOVERED'
+                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                }`}>
+                  {primaryCase.case_status}
+                </span>
+              ) : (
+                <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold border bg-slate-800 text-slate-400 border-slate-700">
+                  NO ACTIVE CASE
+                </span>
+              )}
             </div>
 
-            <div className="mt-5 space-y-3.5">
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-                <div>
-                  <div className="text-[11px] text-slate-400">Diagnosed Condition</div>
-                  <div className="text-base font-bold text-white mt-0.5">
-                    {primaryCase?.disease?.name || profile?.disease_name || 'Under Surveillance Evaluation'}
+            {primaryCase ? (
+              <div className="mt-5 space-y-3.5">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                  <div>
+                    <div className="text-[11px] text-slate-400">Diagnosed Disease</div>
+                    <div className="text-base font-bold text-white mt-0.5">
+                      {primaryCase.disease?.name || profile?.disease_name || 'Under Surveillance'}
+                    </div>
+                  </div>
+                  {primaryCase.disease?.code && (
+                    <span className="px-2.5 py-1 rounded-lg bg-slate-800 font-mono text-xs font-semibold text-brand-400 border border-slate-700">
+                      {primaryCase.disease.code}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                    <span className="text-[11px] text-slate-400 block">Classification</span>
+                    <span className="text-xs font-semibold text-emerald-400 mt-1 inline-block">
+                      {primaryCase.disease?.contagion_type || 'CONTAGIOUS'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                    <span className="text-[11px] text-slate-400 block">Clinical Severity</span>
+                    <span className={`text-xs font-semibold mt-1 inline-block ${
+                      primaryCase.severity === 'CRITICAL' || primaryCase.severity === 'SEVERE'
+                        ? 'text-rose-400'
+                        : 'text-amber-300'
+                    }`}>
+                      {primaryCase.severity || 'MODERATE'}
+                    </span>
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-lg bg-slate-800 font-mono text-xs font-semibold text-brand-400 border border-slate-700">
-                  {primaryCase?.disease?.code || (profile?.disease_name ? 'DISEASE' : 'PENDING')}
-                </span>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-                  <span className="text-[11px] text-slate-400 block">Clinical Severity</span>
-                  <span className="text-xs font-semibold text-amber-300 mt-1 inline-block">
-                    {primaryCase?.severity || 'MODERATE'}
-                  </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                    <span className="text-[11px] text-slate-400 block">Diagnosis Date</span>
+                    <span className="text-xs font-semibold text-slate-200 mt-1 inline-block">
+                      {primaryCase.diagnosis_date
+                        ? new Date(primaryCase.diagnosis_date).toLocaleDateString('en-IN', { dateStyle: 'medium' })
+                        : 'Recorded on Admission'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                    <span className="text-[11px] text-slate-400 block">Transmission Category</span>
+                    <span className="text-xs font-semibold text-slate-300 mt-1 inline-block">
+                      {primaryCase.disease?.category || 'Infectious Disease'}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
-                  <span className="text-[11px] text-slate-400 block">Diagnosis Date</span>
-                  <span className="text-xs font-semibold text-slate-200 mt-1 inline-block">
-                    {primaryCase?.diagnosis_date ? new Date(primaryCase.diagnosis_date).toLocaleDateString('en-IN', {
-                      dateStyle: 'medium',
-                    }) : (profile?.created_at ? new Date(profile.created_at).toLocaleDateString('en-IN', { dateStyle: 'medium' }) : 'Recent')}
-                  </span>
-                </div>
+                {primaryCase.clinical_notes && (
+                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
+                    <div className="text-[11px] text-slate-400 font-medium mb-1 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-brand-400" />
+                      <span>Clinical Observations & Remarks</span>
+                    </div>
+                    <p className="text-xs text-slate-300 leading-relaxed italic">
+                      "{primaryCase.clinical_notes}"
+                    </p>
+                  </div>
+                )}
               </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
-                <div className="text-[11px] text-slate-400 font-medium mb-1 flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-brand-400" />
-                  <span>Clinical Observations & Notes</span>
-                </div>
-                <p className="text-xs text-slate-300 leading-relaxed italic">
-                  "{primaryCase?.clinical_notes || 'Patient presented with acute high fever, thrombocytopenia, and retro-orbital pain in Palayam Ward. Monitored for plasma leakage.'}"
-                </p>
+            ) : (
+              <div className="mt-5 p-6 rounded-xl bg-slate-900/40 border border-slate-800 text-center text-slate-400 text-xs">
+                No active disease case registered under surveillance.
               </div>
-            </div>
+            )}
           </div>
 
           <div className="mt-5 pt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-500">
             <span>Surveillance Node: Kerala Public Health Dept</span>
-            <span className="text-slate-400">Contagion: Vector-Borne</span>
+            <span className="text-slate-400">
+              {primaryCase?.disease?.category ? `Category: ${primaryCase.disease.category}` : 'Active Surveillance'}
+            </span>
           </div>
         </div>
 

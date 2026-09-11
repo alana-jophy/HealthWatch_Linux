@@ -199,9 +199,12 @@ def test_patient_cross_patient_isolation():
     assert me_res.status_code == 200
     assert me_res.json()["pseudo_id"] == "PAT-USER-143"
 
-    # 2. Alana cannot access all patients list /patients/
+    # 2. Alana querying patient list returns only her own profile
     list_res = client.get("/api/v1/patients/", headers=headers)
-    assert list_res.status_code == 403
+    assert list_res.status_code == 200
+    list_data = list_res.json()
+    assert list_data["total"] == 1
+    assert list_data["items"][0]["pseudo_id"] == "PAT-USER-143"
 
     # 3. Alana querying another patient's roadmap (e.g. PAT-SYNTH-101) is denied or scoped to self
     roadmap_res = client.get("/api/v1/monitoring/roadmap?pseudo_id=PAT-SYNTH-101", headers=headers)

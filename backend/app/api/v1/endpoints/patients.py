@@ -46,6 +46,27 @@ def build_patient_response(patient: Patient, db: Session) -> PatientResponse:
     if not disease_name and patient.disease:
         disease_name = patient.disease.name
 
+    latest_lat = latest_loc.latitude if latest_loc else None
+    latest_lng = latest_loc.longitude if latest_loc else None
+    latest_acc = (latest_loc.accuracy or latest_loc.accuracy_meters) if latest_loc else None
+    latest_rec = latest_loc.recorded_at if latest_loc else None
+    latest_src = latest_loc.source if latest_loc else None
+
+    # For patients without a smartphone, provide static administrative location representation
+    if not patient.has_phone and latest_loc is None:
+        if patient.ward and patient.ward.center_latitude and patient.ward.center_longitude:
+            latest_lat = patient.ward.center_latitude
+            latest_lng = patient.ward.center_longitude
+            latest_src = "STATIC_ADMIN_LOCATION"
+        elif patient.local_body and patient.local_body.center_latitude and patient.local_body.center_longitude:
+            latest_lat = patient.local_body.center_latitude
+            latest_lng = patient.local_body.center_longitude
+            latest_src = "STATIC_ADMIN_LOCATION"
+        elif patient.district and patient.district.center_latitude and patient.district.center_longitude:
+            latest_lat = patient.district.center_latitude
+            latest_lng = patient.district.center_longitude
+            latest_src = "STATIC_ADMIN_LOCATION"
+
     return PatientResponse(
         id=patient.id,
         user_id=patient.user_id,
@@ -56,6 +77,9 @@ def build_patient_response(patient: Patient, db: Session) -> PatientResponse:
         gender=patient.gender,
         has_phone=patient.has_phone,
         contact_number=patient.contact_number,
+        date_of_birth=patient.date_of_birth,
+        tracking_interval_minutes=patient.tracking_interval_minutes or 15,
+        tracking_days=patient.tracking_days or "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday",
         disease_id=disease_id,
         disease_name=disease_name,
         address=patient.address,
@@ -70,11 +94,11 @@ def build_patient_response(patient: Patient, db: Session) -> PatientResponse:
         is_active=patient.is_active,
         account_email=account_email,
         account_id=patient.pseudo_id,
-        latest_latitude=latest_loc.latitude if latest_loc else None,
-        latest_longitude=latest_loc.longitude if latest_loc else None,
-        latest_accuracy=latest_loc.accuracy or latest_loc.accuracy_meters if latest_loc else None,
-        latest_recorded_at=latest_loc.recorded_at if latest_loc else None,
-        latest_source=latest_loc.source if latest_loc else None,
+        latest_latitude=latest_lat,
+        latest_longitude=latest_lng,
+        latest_accuracy=latest_acc,
+        latest_recorded_at=latest_rec,
+        latest_source=latest_src,
         created_at=patient.created_at,
         updated_at=patient.updated_at,
     )
@@ -198,7 +222,23 @@ def create_patient(
         disease_name = d_rec.name
 
     has_phone = payload.has_phone
-    contact_number = payload.contact_number if has_phone else None
+    contact_number = None
+    if has_phone:
+        if not payload.contact_number or not payload.contact_number.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone number is required when mobile phone availability is YES",
+            )
+        contact_number = payload.contact_number.strip()
+
+    tracking_interval_minutes = payload.tracking_interval_minutes or 15
+    if tracking_interval_minutes not in (1, 5, 10, 15):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GPS tracking interval must be one of: 1, 5, 10, or 15 minutes",
+        )
+
+    tracking_days = payload.tracking_days or "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"
 
     patient = Patient(
         pseudo_id=payload.pseudo_id,
@@ -209,6 +249,9 @@ def create_patient(
         gender=payload.gender.upper(),
         has_phone=has_phone,
         contact_number=contact_number,
+        date_of_birth=payload.date_of_birth,
+        tracking_interval_minutes=tracking_interval_minutes,
+        tracking_days=tracking_days,
         disease_id=disease_id,
         disease_name=disease_name,
         address=payload.address,
@@ -267,7 +310,7 @@ def list_patients(
     has_phone: Optional[bool] = Query(None, description="Filter by mobile phone availability"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     skip: int = Query(0, ge=0, description="Pagination offset"),
-    limit: int = Query(50, ge=1, le=100, description="Pagination limit"),
+    limit: int = Query(100, ge=1, le=500, description="Pagination limit"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> PatientListResponse:
@@ -276,12 +319,9 @@ def list_patients(
 
     user_role = current_user.role.name if current_user.role else ""
 
-    # Patient role restriction: patients cannot query global registry
+    # Strict RBAC Isolation: Patients can ONLY view their own record
     if user_role == RoleEnum.PATIENT.value and not current_user.is_superuser:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied: Patients are not authorized to query the patient registry. Use /api/v1/patients/me.",
-        )
+        query = query.filter(Patient.user_id == current_user.id)
     elif user_role == RoleEnum.HEALTH_WORKER.value and not current_user.is_superuser:
         query = query.filter(Patient.assigned_worker_id == current_user.id)
         if q:
@@ -353,14 +393,10 @@ def get_my_patient_profile(
     """Get current authenticated patient's own profile strictly isolated."""
     patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
     if not patient:
-        # Fallback for administrative users without linked patient
-        if current_user.is_superuser or (current_user.role and current_user.role.name != RoleEnum.PATIENT.value):
-            patient = db.query(Patient).first()
-        if not patient:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No patient profile found linked to this user account",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No patient profile found linked to this user account",
+        )
     return build_patient_response(patient, db)
 
 
@@ -504,6 +540,30 @@ def update_patient(
         patient.has_phone = has_phone_val
         if not has_phone_val:
             patient.contact_number = None
+
+    if "tracking_interval_minutes" in update_data:
+        new_int = update_data.pop("tracking_interval_minutes")
+        if new_int in (1, 5, 10, 15):
+            patient.tracking_interval_minutes = new_int
+            from app.models.monitoring import MonitoringSession, SessionStatus
+            active_sessions = db.query(MonitoringSession).filter(
+                MonitoringSession.patient_id == patient.id,
+                MonitoringSession.status == SessionStatus.ACTIVE.value
+            ).all()
+            for s in active_sessions:
+                s.sampling_interval_minutes = new_int
+
+    if "tracking_days" in update_data:
+        new_days = update_data.pop("tracking_days")
+        if new_days:
+            patient.tracking_days = new_days
+            from app.models.monitoring import MonitoringSession, SessionStatus
+            active_sessions = db.query(MonitoringSession).filter(
+                MonitoringSession.patient_id == patient.id,
+                MonitoringSession.status == SessionStatus.ACTIVE.value
+            ).all()
+            for s in active_sessions:
+                s.tracking_days = new_days
 
     for field, value in update_data.items():
         setattr(patient, field, value)

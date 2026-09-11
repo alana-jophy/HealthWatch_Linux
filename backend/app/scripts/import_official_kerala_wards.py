@@ -43,7 +43,7 @@ def format_lb_name(name: str, lb_type: str) -> str:
         return clean
     return clean
 
-def import_official_wards():
+def import_official_wards(session=None):
     start_time = time.time()
     print("=" * 70)
     print("HEALTHWATCH — OFFICIAL KERALA WARDS IMPORT")
@@ -54,21 +54,57 @@ def import_official_wards():
     if not os.path.exists(CSV_PATH):
         raise FileNotFoundError(f"Missing official ward dataset at {CSV_PATH}")
 
-    engine = create_engine(settings.DATABASE_URL)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    if session is None:
+        engine = create_engine(settings.DATABASE_URL)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+    else:
+        engine = session.get_bind()
 
     try:
         # Ensure columns and indexes exist in DB
         with engine.connect() as conn:
-            conn.execute(text("ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS code VARCHAR(50);"))
-            conn.execute(text("ALTER TABLE wards ADD COLUMN IF NOT EXISTS ward_code VARCHAR(50);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_local_bodies_code ON local_bodies(code);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wards_ward_code ON wards(ward_code);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wards_lb_wn ON wards(local_body_id, ward_number);"))
-            conn.commit()
+            with conn.begin():
+                conn.execute(text("ALTER TABLE local_bodies ADD COLUMN IF NOT EXISTS code VARCHAR(50);"))
+                conn.execute(text("ALTER TABLE wards ADD COLUMN IF NOT EXISTS ward_code VARCHAR(50);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_local_bodies_code ON local_bodies(code);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wards_ward_code ON wards(ward_code);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_wards_lb_wn ON wards(local_body_id, ward_number);"))
 
-        # Step 1: Map all 14 districts
+        # Step 1: Map all 14 districts (seed if missing)
+        OFFICIAL_14_DISTRICTS = [
+            {"code": "KL-ALP", "name": "Alappuzha", "lat": 9.4981, "lng": 76.3388},
+            {"code": "KL-EKM", "name": "Ernakulam", "lat": 9.9816, "lng": 76.2999},
+            {"code": "KL-IDK", "name": "Idukki", "lat": 9.8497, "lng": 76.9806},
+            {"code": "KL-KNR", "name": "Kannur", "lat": 11.8745, "lng": 75.3704},
+            {"code": "KL-KSD", "name": "Kasaragod", "lat": 12.5102, "lng": 74.9852},
+            {"code": "KL-KLM", "name": "Kollam", "lat": 8.8932, "lng": 76.6141},
+            {"code": "KL-KTM", "name": "Kottayam", "lat": 9.5916, "lng": 76.5222},
+            {"code": "KL-KKD", "name": "Kozhikode", "lat": 11.2588, "lng": 75.7804},
+            {"code": "KL-MLP", "name": "Malappuram", "lat": 11.0510, "lng": 76.0711},
+            {"code": "KL-PKD", "name": "Palakkad", "lat": 10.7867, "lng": 76.6548},
+            {"code": "KL-PTA", "name": "Pathanamthitta", "lat": 9.2648, "lng": 76.7870},
+            {"code": "KL-TVM", "name": "Thiruvananthapuram", "lat": 8.5241, "lng": 76.9366},
+            {"code": "KL-TCR", "name": "Thrissur", "lat": 10.5276, "lng": 76.2144},
+            {"code": "KL-WYD", "name": "Wayanad", "lat": 11.6854, "lng": 76.1320},
+        ]
+
+        for d_info in OFFICIAL_14_DISTRICTS:
+            existing_d = session.query(District).filter(
+                (District.code == d_info["code"]) | (District.name.ilike(d_info["name"]))
+            ).first()
+            if not existing_d:
+                new_d = District(
+                    code=d_info["code"],
+                    name=d_info["name"],
+                    state="Kerala",
+                    center_latitude=d_info["lat"],
+                    center_longitude=d_info["lng"],
+                    source="OFFICIAL_SEC",
+                )
+                session.add(new_d)
+        session.commit()
+
         districts = session.query(District).all()
         district_map = {d.name.strip().lower(): d for d in districts}
         print(f"Loaded {len(districts)} existing districts from DB.")

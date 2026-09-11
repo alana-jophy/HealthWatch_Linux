@@ -49,11 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Surveillance Dashboard', icon: LayoutDashboard },
     { id: 'patient-management', label: 'Patient Management', icon: Users, badge: 'CRUD' },
     { id: 'disease-management', label: 'Disease Management', icon: Biohazard },
-    { id: 'gis', label: 'Geographic Map (GIS)', icon: MapPin },
-    { id: 'heatmap', label: 'Disease Hotspot Heatmap', icon: Flame },
     { id: 'movement-analysis', label: 'Movement Analysis', icon: Route },
-    { id: 'exposure-analysis', label: 'Exposure Analysis', icon: ShieldAlert },
-    { id: 'ai-predictions', label: 'Outbreak Forecaster', icon: BrainCircuit, badge: 'ML' },
     { id: 'reports', label: 'Surveillance Reports', icon: FileText },
     { id: 'user-management', label: 'User Management', icon: ShieldCheck },
   ];

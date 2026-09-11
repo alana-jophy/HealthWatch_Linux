@@ -12,6 +12,9 @@ class PatientBase(BaseModel):
     gender: str = Field(default="UNKNOWN", description="Gender (MALE, FEMALE, OTHER, UNKNOWN)")
     has_phone: bool = Field(default=True, description="Whether the patient possesses an active mobile phone")
     contact_number: Optional[str] = Field(None, description="Contact phone number (10 numeric digits if has_phone=True)")
+    date_of_birth: Optional[datetime] = Field(None, description="Patient date of birth")
+    tracking_interval_minutes: int = Field(default=15, description="Officer-configured GPS tracking interval in minutes (1, 5, 10, 15)")
+    tracking_days: str = Field(default="Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday", description="Comma-separated authorized tracking days of week")
     disease_id: Optional[uuid.UUID] = Field(None, description="Referenced Disease ID from catalog")
     disease_name: Optional[str] = Field(None, description="Catalog disease name")
     address: Optional[str] = Field(None, description="Residential address description")
@@ -37,11 +40,20 @@ class PatientCreate(PatientBase):
     @classmethod
     def validate_contact_number(cls, v: Optional[str]) -> Optional[str]:
         if v is not None and v.strip() != "":
-            clean = v.strip()
-            if not clean.isdigit() or len(clean) != 10:
-                raise ValueError("Phone number must be exactly 10 numeric digits")
+            import re
+            clean = re.sub(r"[^\d+]", "", v.strip())
+            digits = re.sub(r"[^\d]", "", clean)
+            if len(digits) < 5 or len(digits) > 15:
+                raise ValueError("Phone number must contain between 5 and 15 digits.")
             return clean
         return None
+
+    @field_validator("tracking_interval_minutes")
+    @classmethod
+    def validate_tracking_interval(cls, v: int) -> int:
+        if v not in (1, 5, 10, 15):
+            raise ValueError("GPS tracking interval must be one of: 1, 5, 10, or 15 minutes")
+        return v
 
 
 class PatientUpdate(BaseModel):
@@ -51,6 +63,9 @@ class PatientUpdate(BaseModel):
     gender: Optional[str] = None
     has_phone: Optional[bool] = None
     contact_number: Optional[str] = None
+    date_of_birth: Optional[datetime] = None
+    tracking_interval_minutes: Optional[int] = None
+    tracking_days: Optional[str] = None
     disease_id: Optional[uuid.UUID] = None
     disease_name: Optional[str] = None
     address: Optional[str] = None

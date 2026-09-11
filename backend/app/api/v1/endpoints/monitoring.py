@@ -24,6 +24,8 @@ from app.models.user import User
 from app.schemas.auth import RoleEnum
 from app.schemas.consent import (
     AuditLogResponse,
+    BatchLocationSyncRequest,
+    BatchLocationSyncResponse,
     ConsentGrantRequest,
     ConsentResponse,
     ConsentRevokeRequest,
@@ -45,7 +47,24 @@ from app.schemas.roadmap import (
 
 router = APIRouter()
 
+import math
+
 EXPLANATION_NOTICE = "HealthWatch will collect your location approximately every 15 minutes during the authorized monitoring period."
+
+
+def haversine_distance_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great circle distance between two points on the earth in meters."""
+    R = 6371000.0  # Earth radius in meters
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_phi / 2.0) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(delta_lambda / 2.0) ** 2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return R * c
 
 
 def create_audit_entry(
@@ -114,7 +133,7 @@ def get_patient_for_user(current_user: User, db: Session, target_patient_id: Opt
             )
         return patient
 
-    # Officer / Admin flow
+    # Officer / Admin flow: target_patient_id is required
     if target_patient_id:
         patient = db.query(Patient).filter(Patient.id == target_patient_id).first()
         if not patient:
@@ -124,11 +143,10 @@ def get_patient_for_user(current_user: User, db: Session, target_patient_id: Opt
             )
         return patient
 
-    # Fallback for administrative exploration
-    patient = db.query(Patient).first()
-    if not patient:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No patients exist in database")
-    return patient
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Please specify a target patient_id to view monitoring records",
+    )
 
 
 # ==============================================================================
@@ -193,10 +211,23 @@ def get_monitoring_status(
     )
 
     effective_interval = (
-        (active_session.sampling_interval_minutes if active_session and active_session.sampling_interval_minutes else None)
+        getattr(patient, "tracking_interval_minutes", None)
+        or (active_session.sampling_interval_minutes if active_session and active_session.sampling_interval_minutes else None)
         or (latest_session.sampling_interval_minutes if latest_session and latest_session.sampling_interval_minutes else None)
         or settings.LOCATION_SAMPLING_INTERVAL_MINUTES
     )
+
+    raw_tracking_days = (
+        getattr(patient, "tracking_days", None)
+        or (active_session.tracking_days if active_session and hasattr(active_session, "tracking_days") and active_session.tracking_days else None)
+        or "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"
+    )
+    tracking_days_list = [d.strip() for d in raw_tracking_days.split(",") if d.strip()]
+    today_name = now.strftime("%A")
+    is_today_tracking = today_name in tracking_days_list
+
+    if not patient.has_phone or not is_today_tracking:
+        can_collect = False
 
     return PatientMonitoringStatusResponse(
         patient_id=patient.id,
@@ -208,10 +239,13 @@ def get_monitoring_status(
         active_session=active_session,
         latest_session=latest_session,
         can_collect_location=can_collect,
+        has_phone=patient.has_phone,
         sampling_interval_minutes=effective_interval,
         sampling_interval_seconds=effective_interval * 60,
         sampling_interval_description=f"Approximately {effective_interval} minutes",
-        explanation_notice=f"HealthWatch will collect your location approximately every {effective_interval} minutes during the authorized monitoring period.",
+        tracking_days=tracking_days_list,
+        is_tracking_day_today=is_today_tracking,
+        explanation_notice=f"HealthWatch will collect your location approximately every {effective_interval} minutes during authorized tracking days ({', '.join(tracking_days_list)}).",
     )
 
 
@@ -529,7 +563,7 @@ def get_current_session(
         .filter(
             MonitoringSession.patient_id == patient.id,
             MonitoringSession.status == SessionStatus.ACTIVE.value,
-            MonitoringSession.end_time > now,
+            or_(MonitoringSession.end_time.is_(None), MonitoringSession.end_time > now),
         )
         .order_by(MonitoringSession.created_at.desc())
         .first()
@@ -669,6 +703,113 @@ def submit_location_observation(
     )
 
 
+@router.post(
+    "/locations/sync",
+    response_model=BatchLocationSyncResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Batch sync offline location observations",
+    description="Synchronize queued offline GPS observations when device regains connectivity. Prevents duplicates, checks consent, and preserves original device recorded_at timestamps.",
+)
+def batch_sync_locations(
+    payload: BatchLocationSyncRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BatchLocationSyncResponse:
+    """Ingest a batch of location observations with duplicate prevention and timestamp preservation."""
+    patient = get_patient_for_user(current_user, db)
+    if not patient.has_phone:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Location telemetry synchronization is not applicable for patients without a smartphone.",
+        )
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    synced_ids = []
+    synced_count = 0
+    duplicate_count = 0
+    failed_count = 0
+
+    for obs in payload.observations:
+        target_session_id = obs.effective_session_id
+        session = db.query(MonitoringSession).filter(MonitoringSession.id == target_session_id).first()
+        if not session or session.patient_id != patient.id:
+            failed_count += 1
+            continue
+
+        # Check active consent
+        consent = db.query(LocationConsent).filter(
+            LocationConsent.id == session.consent_id,
+            LocationConsent.consent_status == ConsentStatus.ACTIVE.value,
+        ).first()
+        if not consent:
+            failed_count += 1
+            continue
+
+        obs_time = obs.recorded_at or now
+
+        # Duplicate prevention check: matching patient_id and recorded_at within 2 seconds
+        existing = db.query(PatientLocation).filter(
+            PatientLocation.patient_id == patient.id,
+            PatientLocation.recorded_at >= obs_time - datetime.timedelta(seconds=2),
+            PatientLocation.recorded_at <= obs_time + datetime.timedelta(seconds=2),
+        ).first()
+
+        if existing:
+            duplicate_count += 1
+            continue
+
+        loc_id = uuid.uuid4()
+        wkt_point = f"POINT({obs.longitude} {obs.latitude})"
+        eff_accuracy = obs.effective_accuracy
+        loc_source = obs.source or "PATIENT_GPS"
+
+        loc_record = PatientLocation(
+            id=loc_id,
+            session_id=session.id,
+            patient_id=patient.id,
+            recorded_at=obs_time,
+            location=WKTElement(wkt_point, srid=4326),
+            latitude=obs.latitude,
+            longitude=obs.longitude,
+            accuracy_meters=eff_accuracy,
+            speed_mps=obs.speed_mps,
+            altitude=obs.altitude,
+            is_mock_provider=obs.is_mock_provider,
+            source=loc_source,
+        )
+        db.add(loc_record)
+        synced_ids.append(loc_id)
+        synced_count += 1
+
+    if synced_count > 0:
+        create_audit_entry(
+            db=db,
+            user_id=current_user.id,
+            action="LOCATIONS_BATCH_SYNCED",
+            entity_name="PatientLocation",
+            entity_id=str(synced_ids[0]),
+            ip_address=request.client.host if request.client else None,
+            metadata={
+                "patient_pseudo_id": patient.pseudo_id,
+                "synced_count": synced_count,
+                "duplicate_count": duplicate_count,
+                "failed_count": failed_count,
+            },
+        )
+
+    db.commit()
+
+    return BatchLocationSyncResponse(
+        synced_count=synced_count,
+        failed_count=failed_count,
+        duplicate_count=duplicate_count,
+        synced_ids=synced_ids,
+        status="COMPLETED",
+        message=f"Batch sync processed: {synced_count} synced, {duplicate_count} duplicates skipped, {failed_count} failed.",
+    )
+
+
 # ==============================================================================
 # 5. Audit Inspection APIs
 # ==============================================================================
@@ -755,6 +896,7 @@ def get_patient_location_history(
 def get_patient_movement_roadmap(
     patient_id: Optional[uuid.UUID] = None,
     pseudo_id: Optional[str] = None,
+    patient_pseudo_id: Optional[str] = Query(None, description="Alias for pseudo_id"),
     session_id: Optional[uuid.UUID] = None,
     date: Optional[str] = Query(None, description="Date filter format YYYY-MM-DD"),
     start_time: Optional[str] = Query(None, description="Start time filter (HH:MM or ISO)"),
@@ -763,9 +905,12 @@ def get_patient_movement_roadmap(
     current_user: User = Depends(get_current_user),
 ) -> PatientRoadmapResponse:
     """Retrieve chronologically ordered discrete location observations for patient movement roadmap."""
+    if patient_pseudo_id and not pseudo_id:
+        pseudo_id = patient_pseudo_id
+
     user_role = current_user.role.name if current_user.role else ""
 
-    # 1. Resolve Patient with strict RBAC
+    # 1. Resolve Patient with strict RBAC & Zero Hardcoded Fallbacks
     if user_role == RoleEnum.PATIENT.value and not current_user.is_superuser:
         auth_patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
         if not auth_patient:
@@ -778,55 +923,49 @@ def get_patient_movement_roadmap(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: Patients can only retrieve their own movement roadmap.",
             )
-        if pseudo_id and pseudo_id != auth_patient.pseudo_id:
+        if pseudo_id and pseudo_id.strip().upper() != auth_patient.pseudo_id.strip().upper():
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied: Patients can only retrieve their own movement roadmap.",
             )
         target_patient = auth_patient
-    else:
-        # Public health officer, health worker, admin
+    elif user_role == RoleEnum.HEALTH_WORKER.value and not current_user.is_superuser:
+        # Health Worker must specify assigned patient
         if patient_id:
             target_patient = db.query(Patient).filter(Patient.id == patient_id).first()
-            if not target_patient:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Patient with ID '{patient_id}' not found",
-                )
         elif pseudo_id:
-            target_patient = db.query(Patient).filter(Patient.pseudo_id == pseudo_id).first()
-            if not target_patient:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Patient with pseudo ID '{pseudo_id}' not found",
-                )
+            target_patient = db.query(Patient).filter(Patient.pseudo_id.ilike(pseudo_id.strip())).first()
         else:
-            # Default to active synthetic patient or assigned patient for health worker
-            if user_role == RoleEnum.HEALTH_WORKER.value and not current_user.is_superuser:
-                target_patient = db.query(Patient).filter(Patient.assigned_worker_id == current_user.id).first()
-                if not target_patient:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="No patients currently assigned to this health worker",
-                    )
-            else:
-                target_patient = (
-                    db.query(Patient).filter(Patient.pseudo_id == "PAT-SYNTH-101").first()
-                    or db.query(Patient).first()
-                )
-                if not target_patient:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail="No patient records found in database",
-                    )
-
-        # Enforce Health Worker assignment check
-        if user_role == RoleEnum.HEALTH_WORKER.value and not current_user.is_superuser:
-            if target_patient.assigned_worker_id != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied: Patient is not assigned to this health worker",
-                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please specify patient_id or pseudo_id to retrieve movement roadmap",
+            )
+        if not target_patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Patient not found",
+            )
+        if target_patient.assigned_worker_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Patient is not assigned to this health worker",
+            )
+    else:
+        # Public health officer, admin: Must explicitly specify patient (no fallback to default or first patient)
+        if patient_id:
+            target_patient = db.query(Patient).filter(Patient.id == patient_id).first()
+        elif pseudo_id:
+            target_patient = db.query(Patient).filter(Patient.pseudo_id.ilike(pseudo_id.strip())).first()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please select or specify a patient (patient_id or pseudo_id) to view movement roadmap",
+            )
+        if not target_patient:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Patient with specified identifier not found",
+            )
 
     # 2. Build Query
     query = db.query(PatientLocation).filter(PatientLocation.patient_id == target_patient.id)
@@ -909,28 +1048,146 @@ def get_patient_movement_roadmap(
     res_ward_num = target_patient.ward.ward_number if (target_patient.ward and target_patient.ward.ward_number) else target_patient.ward_number
     res_disease = target_patient.disease_name or (target_patient.disease.disease_name if target_patient.disease else None)
 
-    # 3. Construct Items
+    is_static_admin_location = not target_patient.has_phone
     observation_items = []
-    for obs in observations_raw:
-        eff_acc = obs.accuracy if obs.accuracy is not None else obs.accuracy_meters
-        observation_items.append(
-            RoadmapObservationItem(
-                id=obs.id,
-                recorded_at=obs.recorded_at,
-                latitude=obs.latitude,
-                longitude=obs.longitude,
-                accuracy=eff_acc,
-                source=obs.source or "PATIENT_GPS",
-                session_id=obs.session_id or obs.monitoring_session_id,
-                district_name=res_district,
-                local_body_name=res_local_body,
-                ward_name=res_ward_name,
-                ward_number=res_ward_num,
+
+    if target_patient.has_phone:
+        # Filter by authorized tracking days if configured
+        raw_tracking_days = target_patient.tracking_days or "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"
+        allowed_days = set(d.strip() for d in raw_tracking_days.split(",") if d.strip())
+        filtered_obs = [obs for obs in observations_raw if obs.recorded_at.strftime("%A") in allowed_days]
+
+        # 3. Construct Items with sequential 1-based numbering and stationary drift classification
+        anchor_obs = None
+        anchor_lat = None
+        anchor_lng = None
+        anchor_acc = 25.0
+
+        for idx, obs in enumerate(filtered_obs, start=1):
+            eff_acc = obs.accuracy if obs.accuracy is not None else obs.accuracy_meters
+            curr_acc = eff_acc if (eff_acc is not None and eff_acc > 0) else 25.0
+
+            if idx == 1:
+                # First observation establishes the initial stationary anchor
+                anchor_obs = obs
+                anchor_lat = obs.latitude
+                anchor_lng = obs.longitude
+                anchor_acc = curr_acc
+
+                observation_items.append(
+                    RoadmapObservationItem(
+                        id=obs.id,
+                        observation_number=idx,
+                        recorded_at=obs.recorded_at,
+                        latitude=obs.latitude,
+                        longitude=obs.longitude,
+                        accuracy=eff_acc,
+                        source=obs.source or "PATIENT_GPS",
+                        session_id=obs.session_id or obs.monitoring_session_id,
+                        district_name=res_district,
+                        local_body_name=res_local_body,
+                        ward_name=res_ward_name,
+                        ward_number=res_ward_num,
+                        movement_status="INITIAL",
+                        is_stationary_drift=False,
+                        displacement_from_prev_meters=None,
+                        anchor_latitude=anchor_lat,
+                        anchor_longitude=anchor_lng,
+                    )
+                )
+            else:
+                prev_obs = filtered_obs[idx - 2]
+                dist_prev = haversine_distance_meters(prev_obs.latitude, prev_obs.longitude, obs.latitude, obs.longitude)
+                dist_anchor = haversine_distance_meters(anchor_lat, anchor_lng, obs.latitude, obs.longitude)
+
+                # Uncertainty threshold considers GPS accuracy (Android reports 68% confidence; 95% is ~2x)
+                # plus anchor uncertainty and minimum physical resolution.
+                uncertainty_threshold = max(
+                    2.0 * curr_acc,
+                    curr_acc + anchor_acc,
+                    50.0
+                )
+
+                if dist_anchor <= uncertainty_threshold:
+                    # Displacement is within GPS uncertainty/drift margin: Stationary / GPS Drift
+                    movement_status = "STATIONARY_DRIFT"
+                    is_drift = True
+                    # If this reading has significantly higher precision, refine anchor accuracy
+                    if curr_acc < anchor_acc and dist_anchor <= curr_acc:
+                        anchor_acc = curr_acc
+                else:
+                    # Displacement exceeds uncertainty: Confirmed Physical Movement
+                    movement_status = "CONFIRMED_MOVEMENT"
+                    is_drift = False
+                    # Transition active cluster anchor to new confirmed location
+                    anchor_obs = obs
+                    anchor_lat = obs.latitude
+                    anchor_lng = obs.longitude
+                    anchor_acc = curr_acc
+
+                observation_items.append(
+                    RoadmapObservationItem(
+                        id=obs.id,
+                        observation_number=idx,
+                        recorded_at=obs.recorded_at,
+                        latitude=obs.latitude,
+                        longitude=obs.longitude,
+                        accuracy=eff_acc,
+                        source=obs.source or "PATIENT_GPS",
+                        session_id=obs.session_id or obs.monitoring_session_id,
+                        district_name=res_district,
+                        local_body_name=res_local_body,
+                        ward_name=res_ward_name,
+                        ward_number=res_ward_num,
+                        movement_status=movement_status,
+                        is_stationary_drift=is_drift,
+                        displacement_from_prev_meters=round(dist_prev, 1),
+                        anchor_latitude=anchor_lat,
+                        anchor_longitude=anchor_lng,
+                    )
+                )
+    else:
+        # Patient has no smartphone: provide static administrative location representation
+        static_lat = None
+        static_lng = None
+        if target_patient.ward and target_patient.ward.center_latitude and target_patient.ward.center_longitude:
+            static_lat = target_patient.ward.center_latitude
+            static_lng = target_patient.ward.center_longitude
+        elif target_patient.local_body and target_patient.local_body.center_latitude and target_patient.local_body.center_longitude:
+            static_lat = target_patient.local_body.center_latitude
+            static_lng = target_patient.local_body.center_longitude
+        elif target_patient.district and target_patient.district.center_latitude and target_patient.district.center_longitude:
+            static_lat = target_patient.district.center_latitude
+            static_lng = target_patient.district.center_longitude
+
+        if static_lat is not None and static_lng is not None:
+            observation_items.append(
+                RoadmapObservationItem(
+                    id=uuid.uuid4(),
+                    observation_number=1,
+                    recorded_at=target_patient.created_at or datetime.datetime.now(datetime.timezone.utc),
+                    latitude=static_lat,
+                    longitude=static_lng,
+                    accuracy=None,
+                    source="STATIC_ADMIN_LOCATION",
+                    session_id=None,
+                    district_name=res_district,
+                    local_body_name=res_local_body,
+                    ward_name=res_ward_name,
+                    ward_number=res_ward_num,
+                    movement_status="INITIAL",
+                    is_stationary_drift=False,
+                    displacement_from_prev_meters=None,
+                    anchor_latitude=static_lat,
+                    anchor_longitude=static_lng,
+                )
             )
-        )
 
     # 4. Calculate Statistics (do not calculate unsupported speculative information)
     total_obs = len(observation_items)
+    stationary_count = sum(1 for o in observation_items if o.is_stationary_drift)
+    confirmed_count = sum(1 for o in observation_items if o.movement_status == "CONFIRMED_MOVEMENT")
+
     if total_obs > 0:
         start_rec = observation_items[0].recorded_at
         end_rec = observation_items[-1].recorded_at
@@ -955,6 +1212,8 @@ def get_patient_movement_roadmap(
 
     stats = RoadmapStatistics(
         total_observations=total_obs,
+        stationary_count=stationary_count,
+        confirmed_movement_count=confirmed_count,
         monitoring_start=start_rec,
         monitoring_end=end_rec,
         first_recorded_location=first_pt,
@@ -967,11 +1226,21 @@ def get_patient_movement_roadmap(
         patient_pseudo_id=target_patient.pseudo_id,
         patient_name=target_patient.full_name,
         disease_name=res_disease,
+        has_phone=target_patient.has_phone,
+        is_static_admin_location=is_static_admin_location,
+        tracking_interval_minutes=target_patient.tracking_interval_minutes or 15,
+        tracking_days=target_patient.tracking_days,
         session_id=session_id,
         filter_date=date,
         start_time=start_time,
         end_time=end_time,
+        disclaimer_title="Recorded GPS observations",
+        disclaimer=(
+            "The connecting line represents the connection between recorded observations and does not represent continuous GPS tracking. "
+            "Observations within GPS accuracy margins represent stationary location / GPS drift."
+        ),
         statistics=stats,
         observations=observation_items,
     )
+
 

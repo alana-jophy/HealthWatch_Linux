@@ -57,7 +57,7 @@ class TestDiseaseHotspotHeatmap:
             cls.cholera = db.query(Disease).filter(Disease.code.like("%CHOLERA%")).first()
             cls.tvm_district = db.query(District).filter(District.code == "KL-TVM").first()
             cls.ekm_district = db.query(District).filter(District.code == "KL-EKM").first()
-            cls.palayam_ward = db.query(Ward).filter(Ward.name.like("%Palayam%")).first()
+            cls.palayam_ward = db.query(Ward).filter(Ward.name == "Palayam Ward").first() or db.query(Ward).filter(Ward.name.like("%Palayam%")).first()
             cls.marine_drive_ward = db.query(Ward).filter(Ward.name.like("%Marine Drive%")).first()
         finally:
             db.close()

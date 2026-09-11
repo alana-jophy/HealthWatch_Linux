@@ -76,10 +76,13 @@ export const PatientManagementView: React.FC = () => {
     full_name: '',
     email: '',
     initial_password: '',
+    date_of_birth: '',
     age: '' as number | '',
     gender: '',
     has_phone: true,
     contact_number: '',
+    tracking_interval_minutes: 15,
+    tracking_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     disease_id: '',
     disease_name: '',
     address: '',
@@ -100,10 +103,13 @@ export const PatientManagementView: React.FC = () => {
     full_name: '',
     email: '',
     password: '',
-    age: 28,
-    gender: 'FEMALE',
+    date_of_birth: '',
+    age: '' as number | '',
+    gender: '',
     has_phone: true,
     contact_number: '',
+    tracking_interval_minutes: 15,
+    tracking_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
     disease_id: '',
     disease_name: '',
     address: '',
@@ -212,10 +218,13 @@ export const PatientManagementView: React.FC = () => {
       full_name: '',
       email: '',
       initial_password: '',
+      date_of_birth: '',
       age: '' as number | '',
       gender: '',
       has_phone: true,
       contact_number: '',
+      tracking_interval_minutes: 15,
+      tracking_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
       disease_id: '',
       disease_name: '',
       address: '',
@@ -231,6 +240,67 @@ export const PatientManagementView: React.FC = () => {
     setActionError(null);
     setActionSuccess(null);
     setShowAddModal(true);
+  };
+
+  const handleDobChange = (dob: string) => {
+    let calcAge: number | '' = '';
+    if (dob) {
+      const bDate = new Date(dob);
+      const today = new Date();
+      let ageYears = today.getFullYear() - bDate.getFullYear();
+      const m = today.getMonth() - bDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) {
+        ageYears--;
+      }
+      if (ageYears >= 0 && ageYears <= 125) {
+        calcAge = ageYears;
+      }
+    }
+    setFormData((prev) => ({ ...prev, date_of_birth: dob, age: calcAge }));
+  };
+
+  const handleEditDobChange = (dob: string) => {
+    let calcAge: number | '' = '';
+    if (dob) {
+      const bDate = new Date(dob);
+      const today = new Date();
+      let ageYears = today.getFullYear() - bDate.getFullYear();
+      const m = today.getMonth() - bDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) {
+        ageYears--;
+      }
+      if (ageYears >= 0 && ageYears <= 125) {
+        calcAge = ageYears;
+      }
+    }
+    setEditFormData((prev) => ({ ...prev, date_of_birth: dob, age: calcAge !== '' ? calcAge : prev.age }));
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
+    setFormData((prev) => ({ ...prev, contact_number: numericOnly }));
+
+    if (numericOnly.length > 0) {
+      if (numericOnly.length < 10) {
+        setPhoneError(`Phone number must be exactly 10 digits (${numericOnly.length}/10 entered)`);
+      } else if (!/^[6-9]\d{9}$/.test(numericOnly)) {
+        setPhoneError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+      } else {
+        setPhoneError(null);
+      }
+    } else {
+      setPhoneError(null);
+    }
+  };
+
+  const handlePhoneBlur = () => {
+    if (formData.has_phone && formData.contact_number) {
+      if (formData.contact_number.length !== 10) {
+        setPhoneError('Phone number must be exactly 10 digits.');
+      } else if (!/^[6-9]\d{9}$/.test(formData.contact_number)) {
+        setPhoneError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+      }
+    }
   };
 
   const handleAddDistrictChange = async (distId: string) => {
@@ -290,24 +360,6 @@ export const PatientManagementView: React.FC = () => {
     }));
   };
 
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only accept numeric digits, maximum 10 digits
-    const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
-    setFormData((prev) => ({ ...prev, contact_number: numericOnly }));
-
-    if (numericOnly.length > 0 && numericOnly.length < 10) {
-      setPhoneError(`Phone number must be exactly 10 digits (${numericOnly.length}/10 entered)`);
-    } else {
-      setPhoneError(null);
-    }
-  };
-
-  const handlePhoneBlur = () => {
-    if (formData.has_phone && formData.contact_number && formData.contact_number.length !== 10) {
-      setPhoneError('Phone number must be exactly 10 digits.');
-    }
-  };
-
   const handleCreatePatient = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -345,6 +397,11 @@ export const PatientManagementView: React.FC = () => {
         setActionError('Phone number must be exactly 10 numeric digits.');
         return;
       }
+      if (!/^[6-9]\d{9}$/.test(formData.contact_number.trim())) {
+        setPhoneError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+        setActionError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+        return;
+      }
     }
     if (!formData.address.trim()) {
       setActionError('Residential Address is required.');
@@ -372,10 +429,13 @@ export const PatientManagementView: React.FC = () => {
         full_name: formData.full_name.trim(),
         email: formData.email.trim(),
         initial_password: formData.initial_password,
+        date_of_birth: formData.date_of_birth || undefined,
         age: Number(formData.age),
         gender: formData.gender,
         has_phone: formData.has_phone,
         contact_number: formData.has_phone ? formData.contact_number.trim() : null,
+        tracking_interval_minutes: formData.has_phone ? formData.tracking_interval_minutes : 15,
+        tracking_days: formData.has_phone ? formData.tracking_days.join(',') : undefined,
         disease_id: formData.disease_id || undefined,
         disease_name: formData.disease_name || undefined,
         address: formData.address.trim(),
@@ -438,10 +498,13 @@ export const PatientManagementView: React.FC = () => {
       full_name: p.full_name,
       email: p.account_email || '',
       password: '',
+      date_of_birth: p.date_of_birth || '',
       age: p.age,
       gender: p.gender,
       has_phone: p.has_phone ?? Boolean(p.contact_number),
       contact_number: p.contact_number || '',
+      tracking_interval_minutes: p.tracking_interval_minutes || 15,
+      tracking_days: p.tracking_days ? p.tracking_days.split(',').map((d) => d.trim()) : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
       disease_id: p.disease_id || '',
       disease_name: p.disease_name || '',
       address: p.address || '',
@@ -525,8 +588,14 @@ export const PatientManagementView: React.FC = () => {
     const numericOnly = e.target.value.replace(/\D/g, '').slice(0, 10);
     setEditFormData((prev) => ({ ...prev, contact_number: numericOnly }));
 
-    if (numericOnly.length > 0 && numericOnly.length < 10) {
-      setEditPhoneError(`Phone number must be exactly 10 digits (${numericOnly.length}/10 entered)`);
+    if (numericOnly.length > 0) {
+      if (numericOnly.length < 10) {
+        setEditPhoneError(`Phone number must be exactly 10 digits (${numericOnly.length}/10 entered)`);
+      } else if (!/^[6-9]\d{9}$/.test(numericOnly)) {
+        setEditPhoneError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+      } else {
+        setEditPhoneError(null);
+      }
     } else {
       setEditPhoneError(null);
     }
@@ -542,6 +611,11 @@ export const PatientManagementView: React.FC = () => {
         setActionError('Phone number must be exactly 10 numeric digits.');
         return;
       }
+      if (!/^[6-9]\d{9}$/.test(editFormData.contact_number.trim())) {
+        setEditPhoneError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+        setActionError('Indian mobile numbers must start with 6, 7, 8, or 9.');
+        return;
+      }
     }
 
     setActionLoading(true);
@@ -551,10 +625,13 @@ export const PatientManagementView: React.FC = () => {
     try {
       const updatePayload: any = {
         full_name: editFormData.full_name.trim(),
+        date_of_birth: editFormData.date_of_birth || null,
         age: Number(editFormData.age),
         gender: editFormData.gender,
         has_phone: editFormData.has_phone,
         contact_number: editFormData.has_phone ? (editFormData.contact_number ? editFormData.contact_number.trim() : null) : null,
+        tracking_interval_minutes: editFormData.has_phone ? editFormData.tracking_interval_minutes : 15,
+        tracking_days: editFormData.has_phone ? editFormData.tracking_days.join(',') : undefined,
         disease_id: editFormData.disease_id || null,
         disease_name: editFormData.disease_name || null,
         address: editFormData.address.trim(),
@@ -582,7 +659,7 @@ export const PatientManagementView: React.FC = () => {
       setTimeout(() => {
         setEditingPatient(null);
         setActionSuccess(null);
-      }, 1200);
+      }, 1500);
     } catch (err: any) {
       setActionError(err?.response?.data?.detail || 'Failed to update patient record.');
     } finally {
@@ -1008,7 +1085,7 @@ export const PatientManagementView: React.FC = () => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. PAT-USER-101"
+                    placeholder="e.g. PAT-2026-001"
                     value={formData.pseudo_id}
                     onChange={(e) => setFormData({ ...formData, pseudo_id: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white font-mono font-bold text-brand-300"
@@ -1027,7 +1104,19 @@ export const PatientManagementView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.date_of_birth}
+                    onChange={(e) => handleDobChange(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs"
+                  />
+                </div>
                 <div className="space-y-1">
                   <label className="text-slate-400 text-[11px] font-semibold">Age *</label>
                   <input
@@ -1083,7 +1172,7 @@ export const PatientManagementView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Mobile Phone Availability */}
+              {/* Mobile Phone Availability & Officer GPS Tracking Controls */}
               <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
@@ -1092,7 +1181,7 @@ export const PatientManagementView: React.FC = () => {
                       Does the patient have a mobile phone? *
                     </label>
                     <p className="text-[10px] text-slate-400">
-                      Determines whether mobile GPS telemetry surveillance is activated for this patient
+                      Determines whether periodic GPS location telemetry is collected from this patient
                     </p>
                   </div>
 
@@ -1131,39 +1220,93 @@ export const PatientManagementView: React.FC = () => {
                 </div>
 
                 {formData.has_phone ? (
-                  <div className="space-y-1 pt-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-slate-400 text-[11px] font-semibold">Contact Phone Number (10 Digits) *</label>
-                      {formData.contact_number && (
-                        <span className={`text-[10px] font-mono ${formData.contact_number.length === 10 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {formData.contact_number.length}/10 digits
-                        </span>
+                  <div className="space-y-3 pt-1 border-t border-slate-800/80">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-400 text-[11px] font-semibold">Contact Phone Number (10 Digits) *</label>
+                        {formData.contact_number && (
+                          <span className={`text-[10px] font-mono ${formData.contact_number.length === 10 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {formData.contact_number.length}/10 digits
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="tel"
+                        required
+                        inputMode="numeric"
+                        maxLength={10}
+                        placeholder="Enter exactly 10 numeric digits (e.g. 9847012345)"
+                        value={formData.contact_number}
+                        onChange={handlePhoneChange}
+                        onBlur={handlePhoneBlur}
+                        className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white font-mono transition-colors ${
+                          phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-slate-800 focus:border-brand-500'
+                        }`}
+                      />
+                      {phoneError && (
+                        <p className="text-[10px] text-rose-400 flex items-center gap-1 mt-1 font-medium">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          <span>{phoneError}</span>
+                        </p>
                       )}
                     </div>
-                    <input
-                      type="tel"
-                      required
-                      inputMode="numeric"
-                      maxLength={10}
-                      placeholder="Enter exactly 10 numeric digits (e.g. 9847012345)"
-                      value={formData.contact_number}
-                      onChange={handlePhoneChange}
-                      onBlur={handlePhoneBlur}
-                      className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white font-mono transition-colors ${
-                        phoneError ? 'border-rose-500 focus:border-rose-500' : 'border-slate-800 focus:border-brand-500'
-                      }`}
-                    />
-                    {phoneError && (
-                      <p className="text-[10px] text-rose-400 flex items-center gap-1 mt-1 font-medium">
-                        <AlertCircle className="w-3 h-3 shrink-0" />
-                        <span>{phoneError}</span>
-                      </p>
-                    )}
+
+                    {/* Officer-Configurable GPS Cadence & Active Tracking Days */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1">
+                        <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-brand-400" />
+                          <span>GPS Tracking Interval *</span>
+                        </label>
+                        <select
+                          value={formData.tracking_interval_minutes}
+                          onChange={(e) => setFormData({ ...formData, tracking_interval_minutes: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono"
+                        >
+                          <option value={1}>1 Minute (High Frequency)</option>
+                          <option value={5}>5 Minutes (Intensive Surveillance)</option>
+                          <option value={10}>10 Minutes (Standard Monitoring)</option>
+                          <option value={15}>15 Minutes (Default Surveillance Protocol)</option>
+                        </select>
+                        <p className="text-[10px] text-slate-500">Configures periodic sampling cadence</p>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-brand-400" />
+                          <span>Active Tracking Days *</span>
+                        </label>
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                            const isChecked = formData.tracking_days.includes(day);
+                            return (
+                              <button
+                                type="button"
+                                key={day}
+                                onClick={() => {
+                                  const cur = formData.tracking_days;
+                                  const next = isChecked ? cur.filter((d) => d !== day) : [...cur, day];
+                                  setFormData({ ...formData, tracking_days: next });
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all ${
+                                  isChecked
+                                    ? 'bg-brand-500/20 text-brand-300 border-brand-500/40'
+                                    : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'
+                                }`}
+                              >
+                                {day.slice(0, 3)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="text-[10px] text-slate-500">Telemetry collected only on selected days</p>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-amber-400 flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                    <span>No mobile phone. Patient record will be registered without GPS location monitoring requirements or fake data.</span>
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>No mobile phone. Patient will be represented by their official Kerala administrative centroid (STATIC_ADMIN_LOCATION) without fake GPS tracks.</span>
                   </div>
                 )}
               </div>
@@ -1351,7 +1494,19 @@ export const PatientManagementView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-slate-400" />
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.date_of_birth}
+                    onChange={(e) => handleEditDobChange(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white text-xs"
+                  />
+                </div>
                 <div className="space-y-1">
                   <label className="text-slate-400 text-[11px] font-semibold">Age *</label>
                   <input
@@ -1424,36 +1579,89 @@ export const PatientManagementView: React.FC = () => {
                 </div>
 
                 {editFormData.has_phone ? (
-                  <div className="space-y-1 pt-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-slate-400 text-[11px] font-semibold">Contact Phone (10 Digits) *</label>
-                      {editFormData.contact_number && (
-                        <span className={`text-[10px] font-mono ${editFormData.contact_number.length === 10 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                          {editFormData.contact_number.length}/10 digits
-                        </span>
+                  <div className="space-y-3 pt-1 border-t border-slate-800/80">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-slate-400 text-[11px] font-semibold">Contact Phone (10 Digits) *</label>
+                        {editFormData.contact_number && (
+                          <span className={`text-[10px] font-mono ${editFormData.contact_number.length === 10 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {editFormData.contact_number.length}/10 digits
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="tel"
+                        required
+                        inputMode="numeric"
+                        maxLength={10}
+                        value={editFormData.contact_number}
+                        onChange={handleEditPhoneChange}
+                        className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white font-mono ${
+                          editPhoneError ? 'border-rose-500' : 'border-slate-800'
+                        }`}
+                      />
+                      {editPhoneError && (
+                        <p className="text-[10px] text-rose-400 flex items-center gap-1 mt-1 font-medium">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          <span>{editPhoneError}</span>
+                        </p>
                       )}
                     </div>
-                    <input
-                      type="tel"
-                      required
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={editFormData.contact_number}
-                      onChange={handleEditPhoneChange}
-                      className={`w-full px-3 py-2 bg-slate-950 border rounded-xl text-white font-mono ${
-                        editPhoneError ? 'border-rose-500' : 'border-slate-800'
-                      }`}
-                    />
-                    {editPhoneError && (
-                      <p className="text-[10px] text-rose-400 flex items-center gap-1 mt-1 font-medium">
-                        <AlertCircle className="w-3 h-3 shrink-0" />
-                        <span>{editPhoneError}</span>
-                      </p>
-                    )}
+
+                    {/* Officer-Configurable GPS Cadence & Active Tracking Days in Edit Modal */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1">
+                        <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-brand-400" />
+                          <span>GPS Tracking Interval</span>
+                        </label>
+                        <select
+                          value={editFormData.tracking_interval_minutes}
+                          onChange={(e) => setEditFormData({ ...editFormData, tracking_interval_minutes: Number(e.target.value) })}
+                          className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono"
+                        >
+                          <option value={1}>1 Minute (High Frequency)</option>
+                          <option value={5}>5 Minutes (Intensive Surveillance)</option>
+                          <option value={10}>10 Minutes (Standard Monitoring)</option>
+                          <option value={15}>15 Minutes (Default Surveillance Protocol)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                          <Calendar className="w-3.5 h-3.5 text-brand-400" />
+                          <span>Active Tracking Days</span>
+                        </label>
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                            const isChecked = editFormData.tracking_days.includes(day);
+                            return (
+                              <button
+                                type="button"
+                                key={day}
+                                onClick={() => {
+                                  const cur = editFormData.tracking_days;
+                                  const next = isChecked ? cur.filter((d) => d !== day) : [...cur, day];
+                                  setEditFormData({ ...editFormData, tracking_days: next });
+                                }}
+                                className={`px-2 py-1 rounded text-[10px] font-semibold border transition-all ${
+                                  isChecked
+                                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                                    : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'
+                                }`}
+                              >
+                                {day.slice(0, 3)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ) : (
-                  <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-amber-400">
-                    No mobile phone registered. GPS location monitoring is disabled for this patient.
+                  <div className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-amber-400 flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span>No mobile phone. Patient represented by static administrative centroid (STATIC_ADMIN_LOCATION).</span>
                   </div>
                 )}
               </div>

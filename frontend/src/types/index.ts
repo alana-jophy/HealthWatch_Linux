@@ -126,16 +126,22 @@ export interface PatientMonitoringStatus {
 
 export interface RoadmapObservationItem {
   id: string;
+  observation_number?: number;
   recorded_at: string;
   latitude: number;
   longitude: number;
   accuracy?: number | null;
-  source: 'PATIENT_GPS' | 'HEALTH_WORKER' | 'APPROXIMATE' | 'SIMULATED' | string;
+  source: 'PATIENT_GPS' | 'HEALTH_WORKER' | 'APPROXIMATE' | 'SIMULATED' | 'STATIC_ADMIN_LOCATION' | string;
   session_id?: string | null;
   district_name?: string | null;
   local_body_name?: string | null;
   ward_name?: string | null;
   ward_number?: number | null;
+  movement_status?: 'INITIAL' | 'STATIONARY_DRIFT' | 'CONFIRMED_MOVEMENT' | string;
+  is_stationary_drift?: boolean;
+  displacement_from_prev_meters?: number | null;
+  anchor_latitude?: number | null;
+  anchor_longitude?: number | null;
 }
 
 export interface RoadmapPoint {
@@ -145,6 +151,8 @@ export interface RoadmapPoint {
 
 export interface RoadmapStatistics {
   total_observations: number;
+  stationary_count?: number;
+  confirmed_movement_count?: number;
   monitoring_start?: string | null;
   monitoring_end?: string | null;
   first_recorded_location?: RoadmapPoint | null;
@@ -157,10 +165,15 @@ export interface PatientRoadmapResponse {
   patient_pseudo_id: string;
   patient_name?: string | null;
   disease_name?: string | null;
+  has_phone?: boolean;
+  is_static_admin_location?: boolean;
+  tracking_interval_minutes?: number;
+  tracking_days?: string | null;
   session_id?: string | null;
   filter_date?: string | null;
   start_time?: string | null;
   end_time?: string | null;
+  disclaimer_title?: string;
   disclaimer: string;
   statistics: RoadmapStatistics;
   observations: RoadmapObservationItem[];
@@ -183,6 +196,9 @@ export interface PatientProfile {
   gender: string;
   contact_number?: string | null;
   has_phone?: boolean;
+  date_of_birth?: string | null;
+  tracking_interval_minutes?: number;
+  tracking_days?: string;
   disease_id?: string | null;
   disease_name?: string | null;
   address: string;

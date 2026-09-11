@@ -168,10 +168,28 @@ class PatientMonitoringStatusResponse(BaseModel):
     active_session: Optional[SessionResponse] = None
     latest_session: Optional[SessionResponse] = None
     can_collect_location: bool
+    has_phone: bool = True
     sampling_interval_minutes: int = 15
     sampling_interval_seconds: int = 900
     sampling_interval_description: str = "Approximately 15 minutes"
+    tracking_days: List[str] = Field(default_factory=lambda: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"])
+    is_tracking_day_today: bool = True
     explanation_notice: str
+
+
+class BatchLocationSyncRequest(BaseModel):
+    """Batch payload for synchronizing multiple offline location observations."""
+    observations: List[LocationObservationSubmit]
+
+
+class BatchLocationSyncResponse(BaseModel):
+    """Result of batch offline location synchronization."""
+    synced_count: int
+    failed_count: int
+    duplicate_count: int
+    synced_ids: List[uuid.UUID] = Field(default_factory=list)
+    status: str = "COMPLETED"
+    message: str = "Batch synchronization completed"
 
 
 class AuditLogResponse(BaseModel):

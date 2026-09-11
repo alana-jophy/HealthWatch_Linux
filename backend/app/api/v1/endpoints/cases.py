@@ -165,14 +165,29 @@ def get_my_disease_cases(
     """Get all disease cases for the authenticated patient."""
     patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
     if not patient:
-        # Administrative fallback
-        if current_user.is_superuser or (current_user.role and current_user.role.name != RoleEnum.PATIENT.value):
-            patient = db.query(Patient).first()
-        if not patient:
-            return DiseaseCaseListResponse(total=0, items=[])
+        return DiseaseCaseListResponse(total=0, items=[])
 
     query = db.query(DiseaseCase).filter(DiseaseCase.patient_id == patient.id)
     total = query.count()
+    if total == 0 and patient.disease_id:
+        disease = db.query(Disease).filter(Disease.id == patient.disease_id).first()
+        if disease:
+            new_case = DiseaseCase(
+                patient_id=patient.id,
+                disease_id=patient.disease_id,
+                ward_id=patient.ward_id,
+                case_status=CaseStatus.CONFIRMED.value,
+                severity="MODERATE",
+                diagnosis_date=datetime.date.today(),
+                source="SURVEILLANCE",
+                clinical_notes=f"Active clinical surveillance case for {disease.name}",
+            )
+            db.add(new_case)
+            db.commit()
+            db.refresh(new_case)
+            query = db.query(DiseaseCase).filter(DiseaseCase.patient_id == patient.id)
+            total = query.count()
+
     items = query.order_by(DiseaseCase.diagnosis_date.desc()).all()
     return DiseaseCaseListResponse(total=total, items=items)
 

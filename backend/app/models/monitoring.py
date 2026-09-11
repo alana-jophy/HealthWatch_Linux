@@ -61,6 +61,7 @@ class MonitoringSession(Base):
     status = Column(String(50), default=SessionStatus.ACTIVE.value, nullable=False, index=True)
     stopped_at = Column(DateTime(timezone=True), nullable=True)
     sampling_interval_minutes = Column(Integer, default=15, nullable=False)
+    tracking_days = Column(String(250), default="Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday", nullable=False)
 
     # Relationships
     patient = relationship("Patient", back_populates="monitoring_sessions", lazy="selectin")

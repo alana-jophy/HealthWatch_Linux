@@ -10,14 +10,13 @@ import {
   Filter,
   RefreshCw,
   MapPin,
-  Flame,
   Building,
   Info,
   TrendingUp,
   BarChart3,
   PieChart as PieChartIcon
 } from 'lucide-react';
-import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip as LeafletTooltip, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   ResponsiveContainer,
@@ -47,9 +46,19 @@ import {
   fetchWards,
   fetchDiseases,
 } from '../../services/api';
-import { HeatmapLayer } from '../gis/HeatmapLayer';
 
-type MapMode = 'cases' | 'heatmap' | 'districts';
+type MapMode = 'cases' | 'districts';
+
+// Helper controller to reposition the map when switching modes
+const MapViewController: React.FC<{ mode: MapMode }> = ({ mode }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (mode === 'districts') {
+      map.flyTo([10.35, 76.3], 7.5, { animate: true, duration: 0.7 });
+    }
+  }, [mode, map]);
+  return null;
+};
 
 export const PublicHealthSurveillanceDashboard: React.FC = () => {
   // Main Surveillance State
@@ -842,11 +851,11 @@ export const PublicHealthSurveillanceDashboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <MapPin className="w-5 h-5 text-brand-400" />
               <h3 className="text-base font-heading font-bold text-white">
-                Spatial Surveillance Map & Epidemiological Density
+                Spatial Surveillance & District Distribution
               </h3>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Multi-layer spatial telemetry: Disease case markers, dynamic heat density canvas, and district-level aggregations.
+              Dual-mode spatial telemetry: Disease case markers and district-level epidemiological distribution.
             </p>
           </div>
 
@@ -862,18 +871,6 @@ export const PublicHealthSurveillanceDashboard: React.FC = () => {
             >
               <MapPin className="w-3.5 h-3.5" />
               <span>Disease Case Map</span>
-            </button>
-
-            <button
-              onClick={() => setMapMode('heatmap')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                mapMode === 'heatmap'
-                  ? 'bg-brand-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Flame className="w-3.5 h-3.5" />
-              <span>Heatmap Layer</span>
             </button>
 
             <button
@@ -893,11 +890,13 @@ export const PublicHealthSurveillanceDashboard: React.FC = () => {
         {/* Map Container */}
         <div className="relative h-96 w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
           <MapContainer
-            center={[9.5, 76.5]}
-            zoom={8}
+            center={[10.35, 76.3]}
+            zoom={7.5}
             style={{ height: '100%', width: '100%' }}
             className="z-0"
           >
+            <MapViewController mode={mapMode} />
+
             <TileLayer
               attribution='&copy; <a href="https://carto.com/">CARTO</a>'
               url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
@@ -945,62 +944,87 @@ export const PublicHealthSurveillanceDashboard: React.FC = () => {
                 </CircleMarker>
               ))}
 
-            {/* Mode 2: Density Heatmap Layer */}
-            {mapMode === 'heatmap' && data?.map_data.heatmap_points && (
-              <HeatmapLayer
-                points={data.map_data.heatmap_points as [number, number, number][]}
-                radius={32}
-                blur={20}
-              />
-            )}
-
-            {/* Mode 3: District Aggregation Visualization */}
+            {/* Mode 2: District Aggregation Visualization with Clear Labels */}
             {mapMode === 'districts' &&
-              data?.map_data?.districts?.map((d) => (
-                <CircleMarker
-                  key={`district-marker-${d.id}`}
-                  center={[d.latitude, d.longitude]}
-                  radius={Math.max(14, Math.min(36, d.case_count * 2.5))}
-                  pathOptions={{
-                    fillColor: '#6366f1',
-                    fillOpacity: 0.55,
-                    color: '#a5b4fc',
-                    weight: 2,
-                  }}
-                >
-                  <LeafletTooltip permanent direction="center" className="district-count-tooltip">
-                    <span className="font-bold text-white text-[11px] drop-shadow">
-                      {d.case_count}
-                    </span>
-                  </LeafletTooltip>
-                  <Popup className="custom-leaflet-popup">
-                    <div className="p-1 space-y-1 text-slate-900 text-xs">
-                      <div className="font-bold border-b pb-1 text-indigo-900 text-sm">
-                        {d.name} District
+              data?.map_data?.districts?.map((d) => {
+                const hasCases = d.case_count > 0;
+                return (
+                  <CircleMarker
+                    key={`district-marker-${d.id}`}
+                    center={[d.latitude, d.longitude]}
+                    radius={hasCases ? Math.max(14, Math.min(30, 14 + d.case_count * 3)) : 8}
+                    pathOptions={{
+                      fillColor: hasCases ? '#f43f5e' : '#6366f1',
+                      fillOpacity: hasCases ? 0.9 : 0.45,
+                      color: hasCases ? '#ffffff' : '#a5b4fc',
+                      weight: hasCases ? 2.5 : 1.5,
+                    }}
+                  >
+                    <LeafletTooltip
+                      permanent
+                      direction="top"
+                      offset={[0, hasCases ? -12 : -8]}
+                      className="district-label-tooltip"
+                    >
+                      <div
+                        className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-md border shadow-lg backdrop-blur-md pointer-events-none whitespace-nowrap transition-all ${
+                          hasCases
+                            ? 'bg-slate-950/95 border-rose-500/80 text-white shadow-rose-950/60 ring-1 ring-rose-500/40'
+                            : 'bg-slate-950/90 border-slate-700/80 text-slate-200'
+                        }`}
+                      >
+                        <span className="font-semibold text-xs tracking-wide">{d.name}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                            hasCases
+                              ? 'bg-rose-500 text-white shadow-sm'
+                              : 'bg-slate-800 text-slate-400'
+                          }`}
+                        >
+                          {d.case_count}
+                        </span>
                       </div>
-                      <div className="text-[11px]">
-                        <strong>Total Cases:</strong> {d.case_count}
+                    </LeafletTooltip>
+
+                    <Popup className="custom-leaflet-popup">
+                      <div className="p-1 space-y-1.5 text-slate-900 text-xs min-w-[170px]">
+                        <div className="font-bold border-b pb-1 text-slate-900 text-sm flex items-center justify-between">
+                          <span>{d.name} District</span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                              hasCases
+                                ? 'bg-rose-100 text-rose-700'
+                                : 'bg-emerald-100 text-emerald-700'
+                            }`}
+                          >
+                            {hasCases ? 'Active Outbreak' : 'Zero Cases'}
+                          </span>
+                        </div>
+                        <div className="text-[11px] flex justify-between">
+                          <strong className="text-slate-700">Total Cases:</strong>
+                          <span className="font-bold text-slate-900">{d.case_count}</span>
+                        </div>
+                        <div className="text-[11px] flex justify-between">
+                          <strong className="text-slate-700">Active Under Surveillance:</strong>
+                          <span className="font-bold text-rose-600">{d.active_count}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-500 pt-1 border-t flex justify-between">
+                          <span>Coordinates:</span>
+                          <span>
+                            {d.latitude.toFixed(3)}° N, {d.longitude.toFixed(3)}° E
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-[11px]">
-                        <strong>Active Under Surveillance:</strong> {d.active_count}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        Coordinates: {d.latitude.toFixed(3)}, {d.longitude.toFixed(3)}
-                      </div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
-              ))}
+                    </Popup>
+                  </CircleMarker>
+                );
+              })}
           </MapContainer>
 
           {/* Map Legend Overlay */}
           <div className="absolute bottom-3 right-3 z-[400] bg-slate-950/90 border border-slate-800/90 p-3 rounded-xl backdrop-blur text-xs space-y-2 shadow-xl">
             <span className="block font-semibold text-slate-300 text-[11px] uppercase tracking-wider">
-              {mapMode === 'cases'
-                ? 'Case Status'
-                : mapMode === 'heatmap'
-                ? 'Concentration'
-                : 'District Aggregate'}
+              {mapMode === 'cases' ? 'Case Status' : 'District Surveillance'}
             </span>
 
             {mapMode === 'cases' && (
@@ -1024,20 +1048,19 @@ export const PublicHealthSurveillanceDashboard: React.FC = () => {
               </div>
             )}
 
-            {mapMode === 'heatmap' && (
-              <div className="space-y-1 text-[11px]">
-                <div className="h-2 w-32 rounded bg-gradient-to-r from-blue-500 via-yellow-500 to-red-500"></div>
-                <div className="flex justify-between text-[10px] text-slate-400">
-                  <span>Low</span>
-                  <span>Moderate</span>
-                  <span>Hotspot</span>
-                </div>
-              </div>
-            )}
-
             {mapMode === 'districts' && (
-              <div className="text-[11px] text-slate-400">
-                Bubble radius proportional to total district cases.
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-rose-500 border border-white"></span>
+                  <span className="text-slate-200 font-medium">Active Caseload (≥ 1)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500/50 border border-indigo-300"></span>
+                  <span className="text-slate-400">Zero Reported Cases (0)</span>
+                </div>
+                <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800">
+                  All 14 Kerala districts labelled with total confirmed caseload.
+                </p>
               </div>
             )}
           </div>

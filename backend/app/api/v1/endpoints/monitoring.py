@@ -3,10 +3,12 @@ import json
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import or_, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 from geoalchemy2.elements import WKTElement
 from loguru import logger
+
+from app.models.spatial import District, LocalBody, Ward
 
 from app.api.deps import get_current_user
 from app.core.config import settings
@@ -1048,6 +1050,23 @@ def get_patient_movement_roadmap(
     res_ward_num = target_patient.ward.ward_number if (target_patient.ward and target_patient.ward.ward_number) else target_patient.ward_number
     res_disease = target_patient.disease_name or (target_patient.disease.disease_name if target_patient.disease else None)
 
+    admin_geojson_obj = None
+    ward_geojson_obj = None
+    if target_patient.local_body_id:
+        lb_geo_str = db.query(func.ST_AsGeoJSON(LocalBody.boundary)).filter(LocalBody.id == target_patient.local_body_id).scalar()
+        if lb_geo_str:
+            try:
+                admin_geojson_obj = json.loads(lb_geo_str)
+            except Exception:
+                pass
+    if target_patient.ward_id:
+        w_geo_str = db.query(func.ST_AsGeoJSON(Ward.boundary)).filter(Ward.id == target_patient.ward_id).scalar()
+        if w_geo_str:
+            try:
+                ward_geojson_obj = json.loads(w_geo_str)
+            except Exception:
+                pass
+
     is_static_admin_location = not target_patient.has_phone
     observation_items = []
 
@@ -1228,6 +1247,12 @@ def get_patient_movement_roadmap(
         disease_name=res_disease,
         has_phone=target_patient.has_phone,
         is_static_admin_location=is_static_admin_location,
+        district_name=res_district,
+        local_body_name=res_local_body,
+        ward_name=res_ward_name,
+        ward_number=res_ward_num,
+        admin_geojson=admin_geojson_obj,
+        ward_geojson=ward_geojson_obj,
         tracking_interval_minutes=target_patient.tracking_interval_minutes or 15,
         tracking_days=target_patient.tracking_days,
         session_id=session_id,

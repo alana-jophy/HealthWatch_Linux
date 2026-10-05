@@ -277,10 +277,17 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1 sm:col-span-2">
-                <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-brand-400" />
-                  <span>Kerala Administrative Ward</span>
-                </span>
+                <div className="text-[11px] text-slate-400 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-brand-400" />
+                    <span>Kerala Administrative Ward & Surveillance Location</span>
+                  </span>
+                  {profile?.has_phone === false && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-800/60 text-cyan-300 font-semibold">
+                      NO PHONE &bull; ADMIN CENTROID
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs font-mono text-slate-300">
                   {profile ? (
                     `Ward #${profile.ward_number} ${profile.ward_name ? `(${profile.ward_name})` : ''} • ${profile.local_body_name} • ${profile.district_name}`
@@ -288,6 +295,11 @@ export const PatientDashboard: React.FC<PatientDashboardProps> = ({
                     'Loading administrative location...'
                   )}
                 </div>
+                {profile?.latest_latitude && profile?.latest_longitude && (
+                  <div className="text-[10px] font-mono text-cyan-400 pt-0.5">
+                    Centroid Coordinates: {profile.latest_latitude.toFixed(5)}, {profile.latest_longitude.toFixed(5)} ({profile.has_phone === false ? 'Ward Centroid' : 'GPS Observation'})
+                  </div>
+                )}
               </div>
             </div>
           </div>

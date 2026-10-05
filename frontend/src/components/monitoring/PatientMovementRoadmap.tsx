@@ -6,6 +6,7 @@ import {
   Popup, 
   Polyline, 
   Circle,
+  GeoJSON,
   useMap 
 } from 'react-leaflet';
 import L from 'leaflet';
@@ -34,7 +35,10 @@ import {
   Minimize2,
   AlertCircle,
   CheckCircle2,
-  Sliders
+  Sliders,
+  Landmark,
+  Building2,
+  Shield
 } from 'lucide-react';
 
 // Leaflet default icon fix
@@ -49,20 +53,49 @@ L.Icon.Default.mergeOptions({
 const MapBoundsFitter: React.FC<{ 
   observations: RoadmapObservationItem[]; 
   selectedCoord?: [number, number] | null;
+  adminGeojson?: any | null;
+  wardGeojson?: any | null;
 }> = ({
   observations,
-  selectedCoord
+  selectedCoord,
+  adminGeojson,
+  wardGeojson,
 }) => {
   const map = useMap();
 
   useEffect(() => {
     if (selectedCoord) {
       map.flyTo(selectedCoord, 16, { duration: 1.2 });
+    } else if (adminGeojson) {
+      try {
+        const geoLayer = L.geoJSON(adminGeojson);
+        map.fitBounds(geoLayer.getBounds(), { padding: [40, 40], maxZoom: 15 });
+      } catch {
+        if (wardGeojson) {
+          try {
+            const geoLayer = L.geoJSON(wardGeojson);
+            map.fitBounds(geoLayer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+          } catch {}
+        } else if (observations.length > 0) {
+          const bounds = L.latLngBounds(observations.map(o => [o.latitude, o.longitude]));
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        }
+      }
+    } else if (wardGeojson) {
+      try {
+        const geoLayer = L.geoJSON(wardGeojson);
+        map.fitBounds(geoLayer.getBounds(), { padding: [60, 60], maxZoom: 16 });
+      } catch {
+        if (observations.length > 0) {
+          const bounds = L.latLngBounds(observations.map(o => [o.latitude, o.longitude]));
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+        }
+      }
     } else if (observations.length > 0) {
       const bounds = L.latLngBounds(observations.map(o => [o.latitude, o.longitude]));
       map.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
     }
-  }, [observations, selectedCoord, map]);
+  }, [observations, selectedCoord, adminGeojson, wardGeojson, map]);
 
   return null;
 };
@@ -77,8 +110,34 @@ const createCustomMarkerIcon = (
   source: string,
   movementStatus?: string,
   isStationaryDrift?: boolean,
-  isOfficerMode: boolean = false
+  isOfficerMode: boolean = false,
+  wardNumber?: number | null,
+  wardName?: string | null
 ) => {
+  if (source === 'STATIC_ADMIN_LOCATION') {
+    const selectedRing = isSelected ? 'ring-4 ring-amber-400 scale-125 z-50' : 'hover:scale-110';
+    const wardBadge = wardNumber ? `W-${wardNumber}` : 'WARD';
+    const subLabel = wardNumber ? `Ward #${wardNumber} Centroid` : 'Admin Centroid';
+    const html = `
+      <div class="relative flex flex-col items-center justify-center transition-all duration-300 ${selectedRing}">
+        <div class="px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-white font-extrabold text-[11px] flex items-center gap-1.5 shadow-xl border-2 border-amber-200 font-mono tracking-wide">
+          <span>🏛️</span>
+          <span>${wardBadge}</span>
+        </div>
+        <div class="mt-1 whitespace-nowrap bg-slate-950/95 text-[10px] font-bold text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/40 shadow-xl pointer-events-none">
+          ${subLabel}
+        </div>
+      </div>
+    `;
+    return L.divIcon({
+      html,
+      className: 'custom-roadmap-marker-admin',
+      iconSize: [84, 46],
+      iconAnchor: [42, 23],
+      popupAnchor: [0, -25],
+    });
+  }
+
   const isStart = index === 0;
   const isEnd = index === total - 1 && total > 1;
 
@@ -100,10 +159,7 @@ const createCustomMarkerIcon = (
       borderClass = 'border-cyan-300';
     }
   } else {
-    if (source === 'STATIC_ADMIN_LOCATION') {
-      bgClass = 'bg-amber-500';
-      borderClass = 'border-amber-300';
-    } else if (isStationaryDrift || movementStatus === 'STATIONARY_DRIFT') {
+    if (isStationaryDrift || movementStatus === 'STATIONARY_DRIFT') {
       bgClass = 'bg-slate-700';
       borderClass = 'border-amber-400';
     } else if (isStart) {
@@ -389,27 +445,45 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
       {/* 1. Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-xs font-semibold text-cyan-400 mb-2">
-            <Route className="w-3.5 h-3.5" />
-            <span>{isOfficerMode ? 'Movement Analysis' : 'My Movement Roadmap'}</span>
+          <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold mb-2 ${
+            isStaticAdmin 
+              ? 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
+              : 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400'
+          }`}>
+            {isStaticAdmin ? <Landmark className="w-3.5 h-3.5" /> : <Route className="w-3.5 h-3.5" />}
+            <span>
+              {isStaticAdmin 
+                ? 'Administrative Jurisdiction • No Smartphone' 
+                : (isOfficerMode ? 'Movement Analysis' : 'My Movement Roadmap')}
+            </span>
           </div>
           <h1 className="font-heading text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            {isOfficerMode ? 'Movement Analysis' : 'Patient Movement Roadmap'}
+            {isStaticAdmin 
+              ? 'Administrative Location Analysis' 
+              : (isOfficerMode ? 'Movement Analysis' : 'Patient Movement Roadmap')}
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            {isOfficerMode 
-              ? `Surveillance movement analysis and sequential travel observations for registered patients (approximately ~${roadmapData?.tracking_interval_minutes || 15}-minute cadence).`
-              : `Visualizing personal spatial telemetry observations collected approximately every ${roadmapData?.tracking_interval_minutes || 15} minutes.`}
+            {isStaticAdmin
+              ? `Surveillance location anchored to official Kerala administrative hierarchy (District, Panchayath / Local Body, and Ward).`
+              : (isOfficerMode 
+                ? `Surveillance movement analysis and sequential travel observations for registered patients (approximately ~${roadmapData?.tracking_interval_minutes || 15}-minute cadence).`
+                : `Visualizing personal spatial telemetry observations collected approximately every ${roadmapData?.tracking_interval_minutes || 15} minutes.`)}
           </p>
         </div>
 
         {/* Identity Pill */}
         <div className="glass-panel px-4 py-2.5 rounded-xl border border-slate-800 flex items-center gap-3 shrink-0 self-start">
-          <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
-            <User className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+            isStaticAdmin
+              ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
+              : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'
+          }`}>
+            {isStaticAdmin ? <Landmark className="w-5 h-5" /> : <User className="w-5 h-5" />}
           </div>
           <div>
-            <div className="text-xs font-medium text-slate-400">Surveillance Subject</div>
+            <div className="text-xs font-medium text-slate-400">
+              {isStaticAdmin ? 'Administrative Subject' : 'Surveillance Subject'}
+            </div>
             <div className="text-sm font-bold text-white flex items-center gap-2">
               <span>{roadmapData?.patient_pseudo_id || selectedPseudoId || 'Patient'}</span>
               {roadmapData?.patient_name && (
@@ -422,27 +496,32 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
         </div>
       </div>
 
-      {/* 2. STATUTORY DISCLAIMER (Required by Prompt) */}
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 md:p-5 relative overflow-hidden">
+      {/* 2. STATUTORY DISCLAIMER */}
+      <div className={`rounded-xl border p-4 md:p-5 relative overflow-hidden ${
+        isStaticAdmin
+          ? 'border-amber-500/40 bg-amber-500/10'
+          : 'border-amber-500/30 bg-amber-500/10'
+      }`}>
         <div className="flex items-start gap-3.5">
           <div className="p-2 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-400 shrink-0 mt-0.5">
-            <AlertTriangle className="w-5 h-5" />
+            {isStaticAdmin ? <Landmark className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
           </div>
           <div className="space-y-1.5 text-xs md:text-sm">
             <div className="font-bold text-amber-300 flex items-center gap-2">
-              <span>{roadmapData?.disclaimer_title || "Recorded GPS observations"}</span>
+              <span>
+                {isStaticAdmin 
+                  ? 'Administrative Jurisdiction (No Smartphone Registered)' 
+                  : (roadmapData?.disclaimer_title || 'Recorded GPS observations')}
+              </span>
               <span className="text-[11px] bg-amber-500/20 px-2 py-0.5 rounded-full text-amber-200 border border-amber-500/30 font-mono">
-                ~{roadmapData?.tracking_interval_minutes || 15}-Min Sampling
+                {isStaticAdmin ? 'Official SEC Boundaries' : `~${roadmapData?.tracking_interval_minutes || 15}-Min Sampling`}
               </span>
             </div>
             <p className="text-slate-300 leading-relaxed font-semibold">
-              {roadmapData?.disclaimer || "The connecting line represents the connection between recorded observations and does not represent continuous GPS tracking."}
+              {isStaticAdmin
+                ? `This patient was registered without a phone. GPS telemetry is inactive. Surveillance location is depicted strictly according to their registered administrative residence in ${roadmapData?.district_name || 'District'}, ${roadmapData?.local_body_name || 'Panchayath'}, Ward #${roadmapData?.ward_number || ''} (${roadmapData?.ward_name || ''}).`
+                : (roadmapData?.disclaimer || 'The connecting line represents the connection between recorded observations and does not represent continuous GPS tracking.')}
             </p>
-            {isStaticAdmin && (
-              <p className="text-amber-200 text-xs leading-relaxed bg-amber-950/40 p-2 rounded-lg border border-amber-500/20 mt-1">
-                <strong>Note:</strong> This patient is registered without a smartphone. Showing the official administrative centroid for their registered Kerala local body / ward.
-              </p>
-            )}
           </div>
         </div>
       </div>
@@ -541,64 +620,118 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
         </form>
       </div>
 
-      {/* 4. Telemetry Statistics Grid */}
-      {roadmapData?.statistics && (
+      {/* 4. Telemetry / Administrative Statistics Grid */}
+      {roadmapData && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Observations</div>
-            <div className="text-xl font-bold text-white mt-1 flex items-baseline gap-1">
-              <span>{roadmapData.statistics.total_observations}</span>
-              <span className="text-xs font-normal text-slate-400 font-mono">points</span>
-            </div>
-          </div>
+          {isStaticAdmin ? (
+            <>
+              <div className="glass-panel p-3.5 rounded-xl border border-amber-500/30 bg-amber-500/5">
+                <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Mode</div>
+                <div className="text-sm font-bold text-white mt-1 flex items-baseline gap-1">
+                  <span>NO PHONE</span>
+                </div>
+                <div className="text-[10px] text-amber-300 font-mono">Admin Jurisdiction</div>
+              </div>
 
-          <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Start Time</div>
-            <div className="text-sm font-bold text-emerald-400 mt-1 font-mono">
-              {roadmapData.statistics.monitoring_start 
-                ? new Date(roadmapData.statistics.monitoring_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : '—'}
-            </div>
-            <div className="text-[10px] text-slate-500 font-mono">Marker 1 (Initial)</div>
-          </div>
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">District (L1)</div>
+                <div className="text-sm font-bold text-cyan-400 mt-1 truncate" title={roadmapData.district_name || '—'}>
+                  {roadmapData.district_name || '—'}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">Kerala Division</div>
+              </div>
 
-          <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Latest Point</div>
-            <div className="text-sm font-bold text-rose-400 mt-1 font-mono">
-              {roadmapData.statistics.monitoring_end 
-                ? new Date(roadmapData.statistics.monitoring_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                : '—'}
-            </div>
-            <div className="text-[10px] text-slate-500 font-mono">Marker {roadmapData.statistics.total_observations || '—'}</div>
-          </div>
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Panchayath / Body (L2)</div>
+                <div className="text-xs font-bold text-emerald-400 mt-1 truncate" title={roadmapData.local_body_name || '—'}>
+                  {roadmapData.local_body_name || '—'}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">Local Self-Govt</div>
+              </div>
 
-          <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Avg Accuracy</div>
-            <div className="text-xl font-bold text-cyan-400 mt-1 flex items-baseline gap-1">
-              <span>{roadmapData.statistics.average_accuracy !== null && roadmapData.statistics.average_accuracy !== undefined ? `±${roadmapData.statistics.average_accuracy}` : '—'}</span>
-              <span className="text-xs font-normal text-slate-400 font-mono">m</span>
-            </div>
-          </div>
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Ward (L3)</div>
+                <div className="text-xs font-bold text-purple-400 mt-1 truncate" title={roadmapData.ward_name ? `Ward #${roadmapData.ward_number}: ${roadmapData.ward_name}` : '—'}>
+                  {roadmapData.ward_number ? `Ward #${roadmapData.ward_number}` : ''} {roadmapData.ward_name ? `• ${roadmapData.ward_name}` : '—'}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">Surveillance Unit</div>
+              </div>
 
-          <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">GPS Cadence</div>
-            <div className="text-sm font-bold text-slate-200 mt-1 font-mono">
-              ~{roadmapData.tracking_interval_minutes || 15} Mins
-            </div>
-            <div className="text-[10px] text-slate-500 truncate">
-              {roadmapData.tracking_days ? roadmapData.tracking_days.split(',').length + ' days/wk' : 'All Days'}
-            </div>
-          </div>
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Centroid Coord</div>
+                <div className="text-xs font-bold text-slate-200 mt-1 font-mono truncate">
+                  {latestObservation ? `${latestObservation.latitude.toFixed(4)}, ${latestObservation.longitude.toFixed(4)}` : '—'}
+                </div>
+                <div className="text-[10px] text-amber-400 font-mono">Official SEC Centroid</div>
+              </div>
 
-          <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
-            <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Latest Coord</div>
-            <div className="text-xs font-bold text-slate-300 mt-1 font-mono truncate">
-              {latestObservation 
-                ? `${latestObservation.latitude.toFixed(4)}, ${latestObservation.longitude.toFixed(4)}`
-                : '—'}
-            </div>
-            <div className="text-[10px] text-slate-500">{isStaticAdmin ? 'Admin Centroid' : 'WGS84 GPS'}</div>
-          </div>
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Surveillance</div>
+                <div className="text-xs font-bold text-emerald-400 mt-1 font-mono">
+                  In-Ward Active
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">Jurisdiction Bound</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Observations</div>
+                <div className="text-xl font-bold text-white mt-1 flex items-baseline gap-1">
+                  <span>{roadmapData.statistics.total_observations}</span>
+                  <span className="text-xs font-normal text-slate-400 font-mono">points</span>
+                </div>
+              </div>
+
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Start Time</div>
+                <div className="text-sm font-bold text-emerald-400 mt-1 font-mono">
+                  {roadmapData.statistics.monitoring_start 
+                    ? new Date(roadmapData.statistics.monitoring_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">Marker 1 (Initial)</div>
+              </div>
+
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Latest Point</div>
+                <div className="text-sm font-bold text-rose-400 mt-1 font-mono">
+                  {roadmapData.statistics.monitoring_end 
+                    ? new Date(roadmapData.statistics.monitoring_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : '—'}
+                </div>
+                <div className="text-[10px] text-slate-500 font-mono">Marker {roadmapData.statistics.total_observations || '—'}</div>
+              </div>
+
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Avg Accuracy</div>
+                <div className="text-xl font-bold text-cyan-400 mt-1 flex items-baseline gap-1">
+                  <span>{roadmapData.statistics.average_accuracy !== null && roadmapData.statistics.average_accuracy !== undefined ? `±${roadmapData.statistics.average_accuracy}` : '—'}</span>
+                  <span className="text-xs font-normal text-slate-400 font-mono">m</span>
+                </div>
+              </div>
+
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">GPS Cadence</div>
+                <div className="text-sm font-bold text-slate-200 mt-1 font-mono">
+                  ~{roadmapData.tracking_interval_minutes || 15} Mins
+                </div>
+                <div className="text-[10px] text-slate-500 truncate">
+                  {roadmapData.tracking_days ? roadmapData.tracking_days.split(',').length + ' days/wk' : 'All Days'}
+                </div>
+              </div>
+
+              <div className="glass-panel p-3.5 rounded-xl border border-slate-800">
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Latest Coord</div>
+                <div className="text-xs font-bold text-slate-300 mt-1 font-mono truncate">
+                  {latestObservation 
+                    ? `${latestObservation.latitude.toFixed(4)}, ${latestObservation.longitude.toFixed(4)}`
+                    : '—'}
+                </div>
+                <div className="text-[10px] text-slate-500">WGS84 GPS</div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -687,10 +820,79 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
               <MapBoundsFitter 
                 observations={sortedObservations} 
                 selectedCoord={flyToCoord}
+                adminGeojson={roadmapData?.admin_geojson}
+                wardGeojson={roadmapData?.ward_geojson}
               />
 
+              {/* Panchayath / Local Body Boundary Layer */}
+              {roadmapData?.admin_geojson && (
+                <GeoJSON
+                  key={`admin-poly-${roadmapData.patient_id}-${JSON.stringify(roadmapData.admin_geojson).length}`}
+                  data={roadmapData.admin_geojson}
+                  style={{
+                    color: '#10b981',
+                    weight: 3,
+                    dashArray: '6, 6',
+                    opacity: 0.90,
+                    fillColor: '#059669',
+                    fillOpacity: 0.12,
+                  }}
+                >
+                  <Popup>
+                    <div className="p-1.5 space-y-1 text-slate-900 text-xs">
+                      <div className="font-bold text-sm text-emerald-800 flex items-center gap-1.5">
+                        <span>🏛️ {roadmapData.local_body_name}</span>
+                      </div>
+                      <div className="text-slate-600">District: <strong className="text-slate-800">{roadmapData.district_name}</strong></div>
+                      <div className="text-[10px] text-emerald-800 bg-emerald-50 p-1 rounded font-semibold mt-1">
+                        Official Local Body Administrative Territory (All 18 Wards Enclosed)
+                      </div>
+                    </div>
+                  </Popup>
+                </GeoJSON>
+              )}
+
+              {/* Ward Boundary Polygon Layer */}
+              {roadmapData?.ward_geojson ? (
+                <GeoJSON
+                  key={`ward-poly-${roadmapData.patient_id}-${JSON.stringify(roadmapData.ward_geojson).length}`}
+                  data={roadmapData.ward_geojson}
+                  style={{
+                    color: '#8b5cf6',
+                    weight: 2.5,
+                    opacity: 0.95,
+                    fillColor: '#7c3aed',
+                    fillOpacity: 0.28,
+                  }}
+                >
+                  <Popup>
+                    <div className="p-1.5 space-y-1 text-slate-900 text-xs">
+                      <div className="font-bold text-sm text-purple-800 flex items-center gap-1.5">
+                        <span>📍 Ward #{roadmapData.ward_number}: {roadmapData.ward_name}</span>
+                      </div>
+                      <div className="text-slate-600">Panchayath: <strong className="text-slate-800">{roadmapData.local_body_name}</strong></div>
+                      <div className="text-slate-600">District: <strong className="text-slate-800">{roadmapData.district_name}</strong></div>
+                      <div className="text-[10px] text-purple-900 bg-purple-100 p-1 rounded font-semibold mt-1">
+                        Official Electoral & Surveillance Ward Boundary
+                      </div>
+                    </div>
+                  </Popup>
+                </GeoJSON>
+              ) : isStaticAdmin && latestObservation ? (
+                <Circle
+                  center={[latestObservation.latitude, latestObservation.longitude]}
+                  radius={500}
+                  pathOptions={{
+                    color: '#8b5cf6',
+                    weight: 2.5,
+                    fillColor: '#7c3aed',
+                    fillOpacity: 0.20,
+                  }}
+                />
+              ) : null}
+
               {/* Sequential Visual Connection Polyline (Chronologically Ordered for Verified Movements) */}
-              {polylineCoords.length > 1 && (
+              {!isStaticAdmin && polylineCoords.length > 1 && (
                 <Polyline
                   positions={polylineCoords}
                   pathOptions={{
@@ -704,8 +906,8 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                 />
               )}
 
-              {/* Accuracy Circles for Observations (Makes GPS uncertainty margins visible) */}
-              {sortedObservations.map((obs) => {
+              {/* Accuracy Circles for Phone Observations (Makes GPS uncertainty margins visible) */}
+              {!isStaticAdmin && sortedObservations.map((obs) => {
                 const isSelected = obs.id === selectedPointId;
                 const accRadius = obs.accuracy && obs.accuracy > 0 ? obs.accuracy : 20;
                 return (
@@ -724,7 +926,7 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                 );
               })}
 
-              {/* Observation Markers */}
+              {/* Observation / Administrative Markers */}
               {sortedObservations.map((obs, idx) => {
                 const isSelected = obs.id === selectedPointId;
                 const obsNum = obs.observation_number || (idx + 1);
@@ -738,7 +940,9 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                   obs.source,
                   obs.movement_status,
                   obs.is_stationary_drift,
-                  isOfficerMode
+                  isOfficerMode,
+                  obs.ward_number || roadmapData?.ward_number,
+                  obs.ward_name || roadmapData?.ward_name
                 );
 
                 const pointLetter = String.fromCharCode(65 + (idx % 26));
@@ -753,85 +957,143 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                     }}
                   >
                     <Popup className="custom-popup" offset={[0, -10]}>
-                      <div className="p-1 space-y-2 text-slate-900 min-w-[220px]">
-                        <div className="flex items-center justify-between border-b pb-1.5">
-                          <span className="font-bold text-xs uppercase tracking-wider text-cyan-800">
-                            {isOfficerMode 
-                              ? `Point ${pointLetter} ${idx === 0 ? '(Start Observation)' : idx === sortedObservations.length - 1 ? '(Latest Observation)' : '(Way-point)'}`
-                              : `Marker ${obsNum} ${idx === 0 ? '(START)' : idx === sortedObservations.length - 1 ? '(LATEST)' : ''}`}
-                          </span>
-                          <span className="text-[11px] font-mono font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
-                            {timeFormatted}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1 text-xs">
-                          {/* Movement Status Badge */}
-                          <div className="flex justify-between items-center">
-                            <span className="text-slate-500">Status:</span>
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                              obs.is_stationary_drift 
-                                ? 'bg-amber-100 text-amber-800' 
-                                : obs.movement_status === 'CONFIRMED_MOVEMENT'
-                                ? 'bg-cyan-100 text-cyan-800'
-                                : 'bg-emerald-100 text-emerald-800'
-                            }`}>
-                              {obs.is_stationary_drift ? 'STATIONARY / GPS DRIFT' : obs.movement_status === 'CONFIRMED_MOVEMENT' ? 'CONFIRMED MOVEMENT' : 'INITIAL ANCHOR'}
+                      {obs.source === 'STATIC_ADMIN_LOCATION' ? (
+                        <div className="p-1 space-y-2 text-slate-900 min-w-[240px]">
+                          <div className="flex items-center justify-between border-b pb-1.5 bg-amber-50 p-1.5 rounded -mx-1 -mt-1">
+                            <span className="font-bold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                              <span>🏛️</span>
+                              <span>Administrative Location</span>
+                            </span>
+                            <span className="text-[10px] font-mono font-bold bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded">
+                              NO PHONE
                             </span>
                           </div>
 
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Timestamp:</span>
-                            <span className="font-mono text-[11px] text-slate-700">
-                              {new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Raw GPS Coord:</span>
-                            <span className="font-mono text-[11px] font-semibold text-slate-800">
-                              {obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}
-                            </span>
-                          </div>
-                          {obs.district_name && (
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">Location:</span>
-                              <span className="font-medium text-slate-700">
-                                {obs.ward_name ? `${obs.ward_name}, ` : ''}{obs.local_body_name || obs.district_name}
+                          <div className="space-y-1.5 text-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">District:</span>
+                              <span className="font-bold text-slate-900">{obs.district_name || roadmapData?.district_name || 'District'}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">Panchayath / Body:</span>
+                              <span className="font-bold text-emerald-800">{obs.local_body_name || roadmapData?.local_body_name || 'Local Body'}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">Ward:</span>
+                              <span className="font-bold text-purple-800">
+                                {obs.ward_number ? `Ward #${obs.ward_number}` : ''} {obs.ward_name ? `(${obs.ward_name})` : ''}
                               </span>
                             </div>
-                          )}
-                          <div className="flex justify-between">
-                            <span className="text-slate-500">Reported Accuracy:</span>
-                            <span className="font-mono text-[11px] text-emerald-700 font-semibold">
-                              {obs.accuracy ? `±${obs.accuracy} m (Circle shown)` : (obs.source === 'STATIC_ADMIN_LOCATION' ? 'Administrative Centroid' : 'N/A')}
-                            </span>
-                          </div>
-
-                          {obs.is_stationary_drift && (
-                            <div className="text-[10px] text-amber-900 bg-amber-50 p-1.5 rounded border border-amber-200 mt-1 leading-snug">
-                              Displacement is within GPS uncertainty margin. Preserved as stationary location.
+                            <div className="flex justify-between items-center border-t border-slate-200 pt-1">
+                              <span className="text-slate-500">Centroid Coord:</span>
+                              <span className="font-mono text-[11px] font-semibold text-slate-800">
+                                {obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}
+                              </span>
                             </div>
-                          )}
-
-                          <div className="flex justify-between items-center pt-1 border-t">
-                            <span className="text-slate-500">Data Source:</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                              obs.source === 'PATIENT_GPS' 
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : obs.source === 'STATIC_ADMIN_LOCATION'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-indigo-100 text-indigo-800'
-                            }`}>
-                              {obs.source === 'PATIENT_GPS' ? 'REAL PHONE GPS' : obs.source === 'STATIC_ADMIN_LOCATION' ? 'STATIC ADMIN LOCATION' : obs.source}
-                            </span>
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">Telemetry:</span>
+                              <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                                STATIC_ADMIN_LOCATION
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="p-1 space-y-2 text-slate-900 min-w-[220px]">
+                          <div className="flex items-center justify-between border-b pb-1.5">
+                            <span className="font-bold text-xs uppercase tracking-wider text-cyan-800">
+                              {isOfficerMode 
+                                ? `Point ${pointLetter} ${idx === 0 ? '(Start Observation)' : idx === sortedObservations.length - 1 ? '(Latest Observation)' : '(Way-point)'}`
+                                : `Marker ${obsNum} ${idx === 0 ? '(START)' : idx === sortedObservations.length - 1 ? '(LATEST)' : ''}`}
+                            </span>
+                            <span className="text-[11px] font-mono font-semibold bg-slate-100 px-1.5 py-0.5 rounded">
+                              {timeFormatted}
+                            </span>
+                          </div>
+
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">Status:</span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                obs.is_stationary_drift 
+                                  ? 'bg-amber-100 text-amber-800' 
+                                  : obs.movement_status === 'CONFIRMED_MOVEMENT'
+                                  ? 'bg-cyan-100 text-cyan-800'
+                                  : 'bg-emerald-100 text-emerald-800'
+                              }`}>
+                                {obs.is_stationary_drift ? 'STATIONARY / GPS DRIFT' : obs.movement_status === 'CONFIRMED_MOVEMENT' ? 'CONFIRMED MOVEMENT' : 'INITIAL ANCHOR'}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Timestamp:</span>
+                              <span className="font-mono text-[11px] text-slate-700">
+                                {new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Raw GPS Coord:</span>
+                              <span className="font-mono text-[11px] font-semibold text-slate-800">
+                                {obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}
+                              </span>
+                            </div>
+                            {obs.district_name && (
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">Location:</span>
+                                <span className="font-medium text-slate-700">
+                                  {obs.ward_name ? `${obs.ward_name}, ` : ''}{obs.local_body_name || obs.district_name}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Reported Accuracy:</span>
+                              <span className="font-mono text-[11px] text-emerald-700 font-semibold">
+                                {obs.accuracy ? `±${obs.accuracy} m (Circle shown)` : 'N/A'}
+                              </span>
+                            </div>
+
+                            {obs.is_stationary_drift && (
+                              <div className="text-[10px] text-amber-900 bg-amber-50 p-1.5 rounded border border-amber-200 mt-1 leading-snug">
+                                Displacement is within GPS uncertainty margin. Preserved as stationary location.
+                              </div>
+                            )}
+
+                            <div className="flex justify-between items-center pt-1 border-t">
+                              <span className="text-slate-500">Data Source:</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                {obs.source}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </Popup>
                   </Marker>
                 );
               })}
             </MapContainer>
+
+            {/* Floating Administrative Hierarchy Card over Map */}
+            {isStaticAdmin && (
+              <div className="absolute top-4 left-4 z-[1000] bg-slate-950/90 backdrop-blur-md px-3.5 py-2 rounded-xl border border-amber-500/40 text-xs text-slate-200 shadow-2xl flex flex-col gap-0.5 max-w-sm pointer-events-auto">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="font-bold text-amber-300 uppercase tracking-wider font-mono text-[10px]">
+                    Administrative Jurisdiction
+                  </span>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-bold border border-amber-500/30">
+                    NO PHONE
+                  </span>
+                </div>
+                <div className="text-xs font-extrabold text-white">
+                  {roadmapData?.local_body_name || 'Local Body'} • Ward {roadmapData?.ward_number || ''} {roadmapData?.ward_name ? `(${roadmapData.ward_name})` : ''}
+                </div>
+                <div className="text-[10px] text-slate-400 flex items-center justify-between border-t border-slate-800 pt-1 mt-0.5 font-mono">
+                  <span>District: <strong className="text-slate-200">{roadmapData?.district_name || 'District'}</strong></span>
+                  <span>{latestObservation ? `${latestObservation.latitude.toFixed(4)}, ${latestObservation.longitude.toFixed(4)}` : ''}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 6. MAP LEGEND */}
@@ -842,11 +1104,54 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
                 <span>Map Legend</span>
               </span>
               <span className="text-[11px] text-slate-400 font-mono">
-                Sampling Interval: ~{roadmapData?.tracking_interval_minutes || 15} Min
+                {isStaticAdmin ? 'Administrative Boundary Geocoding' : `Sampling Interval: ~${roadmapData?.tracking_interval_minutes || 15} Min`}
               </span>
             </div>
 
-            {isOfficerMode ? (
+            {isStaticAdmin ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-300">
+                <div className="flex items-center gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-amber-500/30">
+                  <div className="px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 text-white font-extrabold text-[10px] flex items-center gap-1 shadow-lg border border-amber-300 font-mono shrink-0">
+                    <span>🏛️</span>
+                    <span>W-{roadmapData?.ward_number || 17}</span>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-amber-300">Ward Centroid</div>
+                    <div className="text-[10px] text-slate-400">Registered Residence Center</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-purple-500/30">
+                  <div className="w-6 h-6 rounded-md bg-purple-500/20 border-2 border-purple-400 flex items-center justify-center shrink-0">
+                    <span className="w-2 h-2 rounded-sm bg-purple-400"></span>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-purple-300">Ward Boundary</div>
+                    <div className="text-[10px] text-slate-400">Ward {roadmapData?.ward_number ? `#${roadmapData.ward_number}` : ''} Local Area</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-emerald-500/30">
+                  <div className="w-6 h-6 rounded-md bg-emerald-500/10 border-2 border-dashed border-emerald-400 flex items-center justify-center shrink-0">
+                    <span className="w-2 h-2 rounded-sm bg-emerald-400"></span>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-emerald-300">Panchayath Limit</div>
+                    <div className="text-[10px] text-slate-400">{roadmapData?.local_body_name || 'Grama Panchayat'}</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
+                  <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-[10px] font-bold text-slate-400">
+                    SEC
+                  </div>
+                  <div>
+                    <div className="font-semibold text-white">Administrative Mode</div>
+                    <div className="text-[10px] text-slate-400">No GPS device tracking</div>
+                  </div>
+                </div>
+              </div>
+            ) : isOfficerMode ? (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-300">
                 <div className="flex items-center gap-2.5 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800">
                   <span className="w-6 h-6 rounded-full bg-emerald-500 border-2 border-emerald-300 text-white font-bold text-[11px] flex items-center justify-center font-mono shrink-0">
@@ -935,125 +1240,225 @@ export const PatientMovementRoadmap: React.FC<PatientMovementRoadmapProps> = ({
           <div className="glass-panel p-4 rounded-2xl border border-slate-800">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2 text-sm font-bold text-white">
-                <Clock className="w-4 h-4 text-cyan-400" />
-                <span>Chronological Timeline</span>
+                {isStaticAdmin ? (
+                  <>
+                    <Building2 className="w-4 h-4 text-amber-400" />
+                    <span>Administrative Hierarchy</span>
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-4 h-4 text-cyan-400" />
+                    <span>Chronological Timeline</span>
+                  </>
+                )}
               </div>
               <span className="text-xs text-slate-400 font-mono">
-                {sortedObservations.length} Records
+                {isStaticAdmin ? '3-Tier Structure' : `${sortedObservations.length} Records`}
               </span>
             </div>
 
             {/* Timeline Scrollable Container */}
-            <div 
-              ref={timelineRef}
-              className="mt-3 space-y-2.5 max-h-[580px] overflow-y-auto pr-1"
-            >
-              {sortedObservations.length > 0 ? (
-                sortedObservations.map((obs, idx) => {
-                  const isSelected = obs.id === selectedPointId;
-                  const isStart = idx === 0;
-                  const isEnd = idx === sortedObservations.length - 1 && sortedObservations.length > 1;
-                  const obsNum = obs.observation_number || (idx + 1);
-                  const timeFormatted = new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            {isStaticAdmin ? (
+              <div className="mt-3 space-y-3">
+                {/* 3-Tier Hierarchy Card */}
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span>Kerala Local Self-Gov</span>
+                    </span>
+                    <span className="text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded border border-amber-500/30">
+                      NO PHONE
+                    </span>
+                  </div>
 
-                  return (
-                    <div
-                      key={obs.id}
-                      id={`timeline-item-${obs.id}`}
-                      onClick={() => handleSelectObservation(obs)}
-                      className={`
-                        p-3 rounded-xl border transition-all duration-200 cursor-pointer text-xs
-                        ${isSelected 
-                          ? 'bg-cyan-500/15 border-cyan-500/50 shadow-lg shadow-cyan-500/10' 
-                          : 'bg-slate-900/80 border-slate-800/80 hover:bg-slate-900 hover:border-slate-700'
-                        }
-                      `}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`
-                            w-6 h-6 rounded-full font-bold text-[11px] flex items-center justify-center font-mono
-                            ${isOfficerMode
-                              ? isStart 
+                  {/* Level 1: District */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 space-y-0.5">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Level 1: District Jurisdiction</span>
+                      <span className="text-cyan-400 font-mono text-[9px]">DMO Thrissur</span>
+                    </div>
+                    <div className="text-sm font-extrabold text-white flex items-center gap-2">
+                      <span>🏛️</span>
+                      <span>{roadmapData?.district_name || 'Thrissur'} District</span>
+                    </div>
+                  </div>
+
+                  {/* Level 2: Panchayath / Local Body */}
+                  <div className="p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30 space-y-0.5">
+                    <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Level 2: Grama Panchayath</span>
+                      <span className="text-emerald-300 font-mono text-[9px]">LSGD</span>
+                    </div>
+                    <div className="text-sm font-extrabold text-emerald-300 flex items-center gap-2">
+                      <span>🏢</span>
+                      <span>{roadmapData?.local_body_name || 'Elavally Grama Panchayat'}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      Primary Health Centre (PHC) & Local Body Council
+                    </div>
+                  </div>
+
+                  {/* Level 3: Ward */}
+                  <div className="p-2.5 rounded-lg bg-purple-950/30 border border-purple-500/30 space-y-0.5">
+                    <div className="text-[10px] font-bold text-purple-400 uppercase tracking-wider flex items-center justify-between">
+                      <span>Level 3: Ward Unit (Micro-Containment)</span>
+                      <span className="text-purple-300 font-mono text-[9px]">SEC Kerala</span>
+                    </div>
+                    <div className="text-sm font-extrabold text-purple-300 flex items-center gap-2">
+                      <span>📍</span>
+                      <span>Ward {roadmapData?.ward_number || 17}: {roadmapData?.ward_name || 'PADIVARAMBU'}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      Centroid: {latestObservation ? `${latestObservation.latitude.toFixed(6)}, ${latestObservation.longitude.toFixed(6)}` : 'Coordinates Attached'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Surveillance Protocol Card */}
+                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-2 text-slate-300">
+                  <div className="font-bold text-slate-200 flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-mono">
+                    <AlertCircle className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Surveillance Methodology</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                    Patient has registered without a mobile telephone device. Automated GPS telemetry is superseded by ward-level epidemiological boundary monitoring.
+                  </p>
+                  <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Field Verification:</span>
+                    <span className="text-emerald-400 font-bold">ASHA / JHI Active</span>
+                  </div>
+                </div>
+
+                {/* Single Observation Record */}
+                {latestObservation && (
+                  <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 text-xs flex items-center justify-between font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] flex items-center justify-center">
+                        🏛️
+                      </span>
+                      <span className="text-slate-300 text-[11px]">
+                        Recorded: {new Date(latestObservation.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-amber-400 font-bold">
+                      {latestObservation.latitude.toFixed(4)}, {latestObservation.longitude.toFixed(4)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div 
+                ref={timelineRef}
+                className="mt-3 space-y-2.5 max-h-[580px] overflow-y-auto pr-1"
+              >
+                {sortedObservations.length > 0 ? (
+                  sortedObservations.map((obs, idx) => {
+                    const isSelected = obs.id === selectedPointId;
+                    const isStart = idx === 0;
+                    const isEnd = idx === sortedObservations.length - 1 && sortedObservations.length > 1;
+                    const obsNum = obs.observation_number || (idx + 1);
+                    const timeFormatted = new Date(obs.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                    return (
+                      <div
+                        key={obs.id}
+                        id={`timeline-item-${obs.id}`}
+                        onClick={() => handleSelectObservation(obs)}
+                        className={`
+                          p-3 rounded-xl border transition-all duration-200 cursor-pointer text-xs
+                          ${isSelected 
+                            ? 'bg-cyan-500/15 border-cyan-500/50 shadow-lg shadow-cyan-500/10' 
+                            : 'bg-slate-900/80 border-slate-800/80 hover:bg-slate-900 hover:border-slate-700'
+                          }
+                        `}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`
+                              w-6 h-6 rounded-full font-bold text-[11px] flex items-center justify-center font-mono
+                              ${isOfficerMode
+                                ? isStart 
+                                  ? 'bg-emerald-500 text-white' 
+                                  : isEnd 
+                                  ? 'bg-rose-500 text-white' 
+                                  : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
+                                : isStart 
                                 ? 'bg-emerald-500 text-white' 
                                 : isEnd 
                                 ? 'bg-rose-500 text-white' 
-                                : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
-                              : isStart 
-                              ? 'bg-emerald-500 text-white' 
-                              : isEnd 
-                              ? 'bg-rose-500 text-white' 
-                              : obs.source === 'STATIC_ADMIN_LOCATION'
-                              ? 'bg-amber-500 text-white'
-                              : obs.is_stationary_drift
-                              ? 'bg-slate-700 text-amber-300 border border-amber-400'
-                              : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
-                            }
-                          `}>
-                            {isOfficerMode ? String.fromCharCode(65 + (idx % 26)) : obsNum}
-                          </span>
-                          <span className="font-bold text-white font-mono text-sm">
-                            {timeFormatted}
-                          </span>
-                          {isOfficerMode ? (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                              isStart 
-                                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
-                                : isEnd 
-                                ? 'text-rose-400 bg-rose-500/10 border-rose-500/20' 
-                                : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
-                            }`}>
-                              {isStart ? 'START' : isEnd ? 'LATEST' : 'WAYPOINT'}
-                            </span>
-                          ) : (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-                              obs.is_stationary_drift
-                                ? 'text-amber-300 bg-amber-500/10 border-amber-500/30'
-                                : isStart 
-                                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                                : isEnd 
-                                ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
                                 : obs.source === 'STATIC_ADMIN_LOCATION'
-                                ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-                                : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
-                            }`}>
-                              {obs.is_stationary_drift ? 'Stationary Drift' : isStart ? 'Start' : isEnd ? 'Latest' : obs.source === 'STATIC_ADMIN_LOCATION' ? 'Admin Centroid' : 'Movement'}
+                                ? 'bg-amber-500 text-white'
+                                : obs.is_stationary_drift
+                                ? 'bg-slate-700 text-amber-300 border border-amber-400'
+                                : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40'
+                              }
+                            `}>
+                              {isOfficerMode ? String.fromCharCode(65 + (idx % 26)) : obsNum}
                             </span>
-                          )}
+                            <span className="font-bold text-white font-mono text-sm">
+                              {timeFormatted}
+                            </span>
+                            {isOfficerMode ? (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                isStart 
+                                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' 
+                                  : isEnd 
+                                  ? 'text-rose-400 bg-rose-500/10 border-rose-500/20' 
+                                  : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                              }`}>
+                                {isStart ? 'START' : isEnd ? 'LATEST' : 'WAYPOINT'}
+                              </span>
+                            ) : (
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                obs.is_stationary_drift
+                                  ? 'text-amber-300 bg-amber-500/10 border-amber-500/30'
+                                  : isStart 
+                                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                                  : isEnd 
+                                  ? 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                                  : obs.source === 'STATIC_ADMIN_LOCATION'
+                                  ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                                  : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                              }`}>
+                                {obs.is_stationary_drift ? 'Stationary Drift' : isStart ? 'Start' : isEnd ? 'Latest' : obs.source === 'STATIC_ADMIN_LOCATION' ? 'Admin Centroid' : 'Movement'}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Source Tag Badge */}
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            obs.source === 'PATIENT_GPS' 
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                              : obs.source === 'STATIC_ADMIN_LOCATION'
+                              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                              : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+                          }`}>
+                            {obs.source === 'PATIENT_GPS' ? 'REAL GPS' : obs.source === 'STATIC_ADMIN_LOCATION' ? 'NO PHONE' : obs.source}
+                          </span>
                         </div>
 
-                        {/* Source Tag Badge */}
-                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                          obs.source === 'PATIENT_GPS' 
-                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                            : obs.source === 'STATIC_ADMIN_LOCATION'
-                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                            : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
-                        }`}>
-                          {obs.source === 'PATIENT_GPS' ? 'REAL GPS' : obs.source === 'STATIC_ADMIN_LOCATION' ? 'NO PHONE' : obs.source}
-                        </span>
+                        <div className="mt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-800/60 pt-1.5">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-cyan-400" />
+                            <span>{obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}</span>
+                          </span>
+                          <span className="text-slate-500">
+                            {obs.accuracy ? `±${obs.accuracy}m` : (obs.source === 'STATIC_ADMIN_LOCATION' ? 'Centroid' : 'Acc: N/A')}
+                          </span>
+                        </div>
                       </div>
-
-                      <div className="mt-2 text-[11px] text-slate-400 font-mono flex items-center justify-between border-t border-slate-800/60 pt-1.5">
-                        <span className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-cyan-400" />
-                          <span>{obs.latitude.toFixed(6)}, {obs.longitude.toFixed(6)}</span>
-                        </span>
-                        <span className="text-slate-500">
-                          {obs.accuracy ? `±${obs.accuracy}m` : (obs.source === 'STATIC_ADMIN_LOCATION' ? 'Centroid' : 'Acc: N/A')}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-center py-12 text-slate-400 text-xs px-4">
-                  {!isPatientUser && !selectedPseudoId 
-                    ? "Please select a patient from the dropdown above to inspect their movement roadmap."
-                    : "No recorded location observations available."}
-                </div>
-              )}
-            </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-12 text-slate-400 text-xs px-4">
+                    {!isPatientUser && !selectedPseudoId 
+                      ? "Please select a patient from the dropdown above to inspect their movement roadmap."
+                      : "No recorded location observations available."}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

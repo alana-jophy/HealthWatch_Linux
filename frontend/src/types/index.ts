@@ -167,6 +167,12 @@ export interface PatientRoadmapResponse {
   disease_name?: string | null;
   has_phone?: boolean;
   is_static_admin_location?: boolean;
+  district_name?: string | null;
+  local_body_name?: string | null;
+  ward_name?: string | null;
+  ward_number?: number | null;
+  admin_geojson?: any | null;
+  ward_geojson?: any | null;
   tracking_interval_minutes?: number;
   tracking_days?: string | null;
   session_id?: string | null;

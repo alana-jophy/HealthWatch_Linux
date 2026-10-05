@@ -30,7 +30,9 @@ import {
   KeyRound,
   Activity,
   Phone,
-  Clock
+  Clock,
+  Calendar,
+  Info
 } from 'lucide-react';
 import { SearchableSelect } from '../common/SearchableSelect';
 
@@ -693,6 +695,30 @@ export const PatientManagementView: React.FC = () => {
     return true;
   });
 
+  // Computed location preview for Create Modal (No Phone Administrative Centroid)
+  const createSelectedWard = addWards.find((w) => w.id === formData.ward_id);
+  const createSelectedLb = addLocalBodies.find((lb) => lb.id === formData.local_body_id);
+  const createSelectedDist = districts.find((d) => d.id === formData.district_id);
+  const createAssignedCoords: [number, number] | null = createSelectedWard?.center_latitude && createSelectedWard?.center_longitude
+    ? [createSelectedWard.center_latitude, createSelectedWard.center_longitude]
+    : (createSelectedLb?.center_latitude && createSelectedLb?.center_longitude
+        ? [createSelectedLb.center_latitude, createSelectedLb.center_longitude]
+        : (createSelectedDist?.center_latitude && createSelectedDist?.center_longitude
+            ? [createSelectedDist.center_latitude, createSelectedDist.center_longitude]
+            : null));
+
+  // Computed location preview for Edit Modal (No Phone Administrative Centroid)
+  const editSelectedWard = editWards.find((w) => w.id === editFormData.ward_id);
+  const editSelectedLb = editLocalBodies.find((lb) => lb.id === editFormData.local_body_id);
+  const editSelectedDist = districts.find((d) => d.id === editFormData.district_id);
+  const editAssignedCoords: [number, number] | null = editSelectedWard?.center_latitude && editSelectedWard?.center_longitude
+    ? [editSelectedWard.center_latitude, editSelectedWard.center_longitude]
+    : (editSelectedLb?.center_latitude && editSelectedLb?.center_longitude
+        ? [editSelectedLb.center_latitude, editSelectedLb.center_longitude]
+        : (editSelectedDist?.center_latitude && editSelectedDist?.center_longitude
+            ? [editSelectedDist.center_latitude, editSelectedDist.center_longitude]
+            : null));
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -892,7 +918,7 @@ export const PatientManagementView: React.FC = () => {
                   <th className="py-3.5 px-4">Login Email</th>
                   <th className="py-3.5 px-4">District</th>
                   <th className="py-3.5 px-4">Local Body / Ward</th>
-                  <th className="py-3.5 px-4">Latest GPS</th>
+                  <th className="py-3.5 px-4">Location (GPS / Admin)</th>
                   <th className="py-3.5 px-4">Status</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
                 </tr>
@@ -940,11 +966,33 @@ export const PatientManagementView: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 font-mono text-[10px]">
                       {p.has_phone === false ? (
-                        <span className="text-slate-600 italic">No phone (GPS inactive)</span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 text-cyan-300 font-sans font-medium text-[11px]">
+                            <MapPin className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            <span className="font-semibold text-white">Ward #{p.ward_number || '—'}</span>
+                            <span className="text-slate-500">&bull;</span>
+                            <span className="text-cyan-300 truncate max-w-[130px]" title={p.local_body_name}>{p.local_body_name || p.district_name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                            <span className="px-1.5 py-0.2 rounded bg-cyan-950 border border-cyan-800/60 text-cyan-300 font-mono text-[9px] font-semibold">
+                              Admin Centroid
+                            </span>
+                            {p.latest_latitude && p.latest_longitude ? (
+                              <span className="text-slate-300 font-mono">
+                                {p.latest_latitude.toFixed(4)}, {p.latest_longitude.toFixed(4)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 italic">{p.district_name}</span>
+                            )}
+                          </div>
+                        </div>
                       ) : p.latest_latitude && p.latest_longitude ? (
-                        <div className="text-emerald-400 flex items-center gap-1">
-                          <Navigation className="w-3 h-3 shrink-0" />
-                          <span>{p.latest_latitude.toFixed(4)}, {p.latest_longitude.toFixed(4)}</span>
+                        <div className="space-y-0.5">
+                          <div className="text-emerald-400 flex items-center gap-1 font-mono">
+                            <Navigation className="w-3 h-3 shrink-0" />
+                            <span>{p.latest_latitude.toFixed(4)}, {p.latest_longitude.toFixed(4)}</span>
+                          </div>
+                          <span className="text-[9px] text-emerald-500/80 font-sans">Live GPS Telemetry</span>
                         </div>
                       ) : (
                         <span className="text-slate-600 italic">No GPS yet</span>
@@ -1395,6 +1443,53 @@ export const PatientManagementView: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {!formData.has_phone && (
+                  <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-cyan-400" />
+                        <span>Assigned Administrative Surveillance Location (No Phone)</span>
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
+                        AUTO-MAPPED
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-300">
+                      Because this patient does not have a mobile phone, their spatial location in surveillance and heatmaps will be mapped according to their registered Kerala administrative hierarchy:
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">1. District</span>
+                        <span className="font-semibold text-white">{createSelectedDist?.name || 'Please select'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">2. Panchayath / Local Body</span>
+                        <span className="font-semibold text-cyan-300 truncate block">{createSelectedLb?.name || 'Please select'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">3. Ward</span>
+                        <span className="font-semibold text-emerald-400">
+                          {createSelectedWard ? `Ward #${createSelectedWard.ward_number} (${createSelectedWard.name})` : 'Please select'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {createAssignedCoords && (
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                        <span className="text-slate-400 font-sans">Centroid Coordinates:</span>
+                        <span className="text-cyan-400 font-bold">
+                          Lat {createAssignedCoords[0].toFixed(5)}, Lng {createAssignedCoords[1].toFixed(5)}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-sans font-medium">
+                          ({createSelectedWard ? 'Ward Level Centroid' : createSelectedLb ? 'Panchayath Level Centroid' : 'District Centroid'})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
@@ -1768,6 +1863,53 @@ export const PatientManagementView: React.FC = () => {
                     />
                   </div>
                 </div>
+
+                {!editFormData.has_phone && (
+                  <div className="p-3.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-cyan-300 flex items-center gap-1.5">
+                        <MapPin className="w-4 h-4 text-cyan-400" />
+                        <span>Assigned Administrative Surveillance Location (No Phone)</span>
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold">
+                        AUTO-MAPPED
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-slate-300">
+                      Because this patient does not have a mobile phone, their spatial location in surveillance and heatmaps will be mapped according to their registered Kerala administrative hierarchy:
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">1. District</span>
+                        <span className="font-semibold text-white">{editSelectedDist?.name || 'Please select'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">2. Panchayath / Local Body</span>
+                        <span className="font-semibold text-cyan-300 truncate block">{editSelectedLb?.name || 'Please select'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] text-slate-400 uppercase font-mono block">3. Ward</span>
+                        <span className="font-semibold text-emerald-400">
+                          {editSelectedWard ? `Ward #${editSelectedWard.ward_number} (${editSelectedWard.name})` : 'Please select'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {editAssignedCoords && (
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                        <span className="text-slate-400 font-sans">Centroid Coordinates:</span>
+                        <span className="text-cyan-400 font-bold">
+                          Lat {editAssignedCoords[0].toFixed(5)}, Lng {editAssignedCoords[1].toFixed(5)}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-sans font-medium">
+                          ({editSelectedWard ? 'Ward Level Centroid' : editSelectedLb ? 'Panchayath Level Centroid' : 'District Centroid'})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Status toggle */}
@@ -1978,47 +2120,116 @@ export const PatientManagementView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Surveillance GPS Sampling Interval Configuration */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-                <span className="text-slate-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                  Surveillance GPS Sampling Interval (Officer Configurable)
-                </span>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-                  <div className="flex items-center gap-2">
-                    <label className="text-[11px] text-slate-400">Cadence:</label>
-                    <select
-                      value={samplingInterval}
-                      onChange={(e) => setSamplingInterval(Number(e.target.value))}
-                      className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono"
-                    >
-                      <option value={1}>1 Minute (High Precision Testing)</option>
-                      <option value={5}>5 Minutes</option>
-                      <option value={10}>10 Minutes</option>
-                      <option value={15}>15 Minutes (Default Standard)</option>
-                      <option value={30}>30 Minutes</option>
-                      <option value={60}>60 Minutes (Hourly Cadence)</option>
-                    </select>
-                  </div>
-                  <span className="text-[11px] text-cyan-400 font-mono font-semibold">
-                    ~{samplingInterval} min telemetry interval
+              {/* Surveillance Location & GPS Cadence Section */}
+              {selectedPatient.has_phone !== false ? (
+                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                  <span className="text-slate-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                    Surveillance GPS Sampling Interval (Officer Configurable)
                   </span>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                    <div className="flex items-center gap-2">
+                      <label className="text-[11px] text-slate-400">Cadence:</label>
+                      <select
+                        value={samplingInterval}
+                        onChange={(e) => setSamplingInterval(Number(e.target.value))}
+                        className="px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-mono"
+                      >
+                        <option value={1}>1 Minute (High Precision Testing)</option>
+                        <option value={5}>5 Minutes</option>
+                        <option value={10}>10 Minutes</option>
+                        <option value={15}>15 Minutes (Default Standard)</option>
+                        <option value={30}>30 Minutes</option>
+                        <option value={60}>60 Minutes (Hourly Cadence)</option>
+                      </select>
+                    </div>
+                    <span className="text-[11px] text-cyan-400 font-mono font-semibold">
+                      ~{samplingInterval} min telemetry interval
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Configures how frequently the mobile client captures and logs GPS observations during authorized monitoring sessions.
+                  </p>
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  Configures how frequently the mobile client captures and logs GPS observations during authorized monitoring sessions.
-                </p>
-              </div>
+              ) : null}
 
-              {/* Real-time GPS Telemetry */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-                <span className="text-slate-400 block text-[10px] uppercase font-mono font-bold flex items-center gap-1.5">
-                  <Navigation className="w-3.5 h-3.5 text-emerald-400" />
-                  Real-time GPS Telemetry (Latest Observation)
-                </span>
-                {selectedPatient.has_phone === false || !selectedPatient.contact_number ? (
-                  <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-500/30 text-amber-300 text-[11px] flex items-center gap-2">
-                    <Info className="w-4 h-4 shrink-0 text-amber-400" />
-                    <span>GPS Telemetry Inactive: Patient does not have a mobile phone. Direct GPS location tracking is not applicable.</span>
+              {/* Spatial Location Telemetry Display (GPS vs No-Phone Administrative Location) */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300 text-xs uppercase font-mono font-bold flex items-center gap-1.5">
+                    {selectedPatient.has_phone === false ? (
+                      <>
+                        <MapPin className="w-4 h-4 text-cyan-400" />
+                        <span>Administrative Location (Ward / Panchayath / District)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-4 h-4 text-emerald-400" />
+                        <span>Real-time GPS Telemetry (Latest Observation)</span>
+                      </>
+                    )}
+                  </span>
+                  {selectedPatient.has_phone === false ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono font-semibold">
+                      NO PHONE &bull; STATIC ADMIN LOCATION
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono font-semibold">
+                      GPS ACTIVE
+                    </span>
+                  )}
+                </div>
+
+                {selectedPatient.has_phone === false ? (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-500/30 space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <Info className="w-4 h-4 shrink-0 text-cyan-400 mt-0.5" />
+                        <div className="text-xs text-slate-300 leading-relaxed">
+                          Patient is registered <strong className="text-white">without a mobile phone</strong>. Spatial location is fixed to their official administrative centroid based on their registered <strong className="text-cyan-300">District, Panchayath (Local Body), and Ward</strong>:
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-cyan-500/20 text-xs">
+                        <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono block">1. District</span>
+                          <span className="font-bold text-white text-xs">{selectedPatient.district_name || '—'}</span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono block">2. Panchayath / Local Body</span>
+                          <span className="font-bold text-cyan-300 text-xs truncate block" title={selectedPatient.local_body_name}>
+                            {selectedPatient.local_body_name || '—'}
+                          </span>
+                        </div>
+                        <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono block">3. Ward</span>
+                          <span className="font-bold text-emerald-400 text-xs">
+                            Ward #{selectedPatient.ward_number} {selectedPatient.ward_name ? `(${selectedPatient.ward_name})` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <span className="text-slate-500 block text-[9px] uppercase">Centroid Latitude</span>
+                        <span className="text-cyan-400 font-semibold">{selectedPatient.latest_latitude ? selectedPatient.latest_latitude.toFixed(6) : '—'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <span className="text-slate-500 block text-[9px] uppercase">Centroid Longitude</span>
+                        <span className="text-cyan-400 font-semibold">{selectedPatient.latest_longitude ? selectedPatient.latest_longitude.toFixed(6) : '—'}</span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <span className="text-slate-500 block text-[9px] uppercase">Resolution Level</span>
+                        <span className="text-white font-semibold">
+                          {selectedPatient.ward_id ? 'Ward Centroid' : selectedPatient.local_body_id ? 'Panchayath Centroid' : 'District Centroid'}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                        <span className="text-slate-500 block text-[9px] uppercase">Source</span>
+                        <span className="text-cyan-400 font-semibold">{selectedPatient.latest_source || 'STATIC_ADMIN_LOCATION'}</span>
+                      </div>
+                    </div>
                   </div>
                 ) : selectedPatient.latest_latitude && selectedPatient.latest_longitude ? (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono text-[11px]">

@@ -546,7 +546,7 @@ export const PatientMonitoringView: React.FC = () => {
 
           {statusData?.has_active_session && (
             <button
-              onClick={handleCaptureRealGpsObservation}
+              onClick={() => handleCaptureRealGpsObservation()}
               disabled={liveGpsLoading}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition-all shadow-md text-xs shrink-0 disabled:opacity-50"
             >

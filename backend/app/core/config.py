@@ -62,14 +62,33 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_db_connection(cls, v: str, info) -> str:
         if isinstance(v, str) and v.strip():
-            return v
+            url = v.strip()
+            if url.startswith("postgresql://"):
+                try:
+                    import psycopg  # noqa: F401
+                except ImportError:
+                    try:
+                        import psycopg2  # noqa: F401
+                        url = "postgresql+psycopg2://" + url[len("postgresql://"):]
+                    except ImportError:
+                        pass
+            return url
         values = info.data
         user = values.get("POSTGRES_USER", "healthwatch_user")
         password = values.get("POSTGRES_PASSWORD", "healthwatch_secure_password_123")
         server = values.get("POSTGRES_SERVER", "localhost")
         port = values.get("POSTGRES_PORT", 5432)
         db = values.get("POSTGRES_DB", "healthwatch_db")
-        return f"postgresql://{user}:{password}@{server}:{port}/{db}"
+        url = f"postgresql://{user}:{password}@{server}:{port}/{db}"
+        try:
+            import psycopg  # noqa: F401
+        except ImportError:
+            try:
+                import psycopg2  # noqa: F401
+                url = f"postgresql+psycopg2://{user}:{password}@{server}:{port}/{db}"
+            except ImportError:
+                pass
+        return url
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

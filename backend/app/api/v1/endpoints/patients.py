@@ -52,19 +52,27 @@ def build_patient_response(patient: Patient, db: Session) -> PatientResponse:
     latest_rec = latest_loc.recorded_at if latest_loc else None
     latest_src = latest_loc.source if latest_loc else None
 
-    # For patients without a smartphone, provide static administrative location representation
-    if not patient.has_phone and latest_loc is None:
-        if patient.ward and patient.ward.center_latitude and patient.ward.center_longitude:
-            latest_lat = patient.ward.center_latitude
-            latest_lng = patient.ward.center_longitude
+    # For patients without a smartphone or without GPS, provide official administrative location according to Ward -> Local Body (Panchayath) -> District
+    if not patient.has_phone or latest_loc is None:
+        ward = patient.ward or (db.query(Ward).filter(Ward.id == patient.ward_id).first() if patient.ward_id else None)
+        local_body = patient.local_body or (db.query(LocalBody).filter(LocalBody.id == patient.local_body_id).first() if patient.local_body_id else None)
+        district = patient.district or (db.query(District).filter(District.id == patient.district_id).first() if patient.district_id else None)
+
+        if ward and ward.center_latitude is not None and ward.center_longitude is not None:
+            latest_lat = ward.center_latitude
+            latest_lng = ward.center_longitude
             latest_src = "STATIC_ADMIN_LOCATION"
-        elif patient.local_body and patient.local_body.center_latitude and patient.local_body.center_longitude:
-            latest_lat = patient.local_body.center_latitude
-            latest_lng = patient.local_body.center_longitude
+            if not ward_name:
+                ward_name = ward.name
+            if not ward_code:
+                ward_code = ward.ward_code
+        elif local_body and local_body.center_latitude is not None and local_body.center_longitude is not None:
+            latest_lat = local_body.center_latitude
+            latest_lng = local_body.center_longitude
             latest_src = "STATIC_ADMIN_LOCATION"
-        elif patient.district and patient.district.center_latitude and patient.district.center_longitude:
-            latest_lat = patient.district.center_latitude
-            latest_lng = patient.district.center_longitude
+        elif district and district.center_latitude is not None and district.center_longitude is not None:
+            latest_lat = district.center_latitude
+            latest_lng = district.center_longitude
             latest_src = "STATIC_ADMIN_LOCATION"
 
     return PatientResponse(
@@ -148,42 +156,51 @@ def create_patient(
     local_body_name = payload.local_body_name
     ward_number = payload.ward_number
 
-    if district_id:
-        d = db.query(District).filter(District.id == district_id).first()
-        if not d:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid district ID specified")
-        district_name = d.name
-
-    if local_body_id:
-        lb = db.query(LocalBody).filter(LocalBody.id == local_body_id).first()
-        if not lb:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid local body ID specified")
-        if district_id and lb.district_id != district_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Referential integrity error: Selected local body does not belong to the selected district",
-            )
-        local_body_name = lb.name
-        if not district_id:
-            district_id = lb.district_id
-            district_name = lb.district.name if lb.district else district_name
+    d_obj: Optional[District] = None
+    lb_obj: Optional[LocalBody] = None
+    w_obj: Optional[Ward] = None
 
     if ward_id:
-        w = db.query(Ward).filter(Ward.id == ward_id).first()
-        if not w:
+        w_obj = db.query(Ward).filter(Ward.id == ward_id).first()
+        if not w_obj:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ward ID specified")
-        if local_body_id and w.local_body_id != local_body_id:
+        if local_body_id and w_obj.local_body_id != local_body_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Referential integrity error: Selected ward does not belong to the selected local body",
             )
-        ward_number = w.ward_number
+        ward_number = w_obj.ward_number
         if not local_body_id:
-            local_body_id = w.local_body_id
-            local_body_name = w.local_body.name if w.local_body else local_body_name
-            if w.local_body and not district_id:
-                district_id = w.local_body.district_id
-                district_name = w.local_body.district.name if w.local_body.district else district_name
+            local_body_id = w_obj.local_body_id
+            local_body_name = w_obj.local_body.name if w_obj.local_body else local_body_name
+            if w_obj.local_body and not district_id:
+                district_id = w_obj.local_body.district_id
+                district_name = w_obj.local_body.district.name if w_obj.local_body.district else district_name
+
+    if local_body_id and not lb_obj:
+        lb_obj = db.query(LocalBody).filter(LocalBody.id == local_body_id).first()
+        if not lb_obj:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid local body ID specified")
+        if district_id and lb_obj.district_id != district_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Referential integrity error: Selected local body does not belong to the selected district",
+            )
+        local_body_name = lb_obj.name
+        if not district_id:
+            district_id = lb_obj.district_id
+            district_name = lb_obj.district.name if lb_obj.district else district_name
+
+    if district_id and not d_obj:
+        d_obj = db.query(District).filter(District.id == district_id).first()
+        if not d_obj:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid district ID specified")
+        district_name = d_obj.name
+
+    if w_obj and not lb_obj and w_obj.local_body:
+        lb_obj = w_obj.local_body
+    if lb_obj and not d_obj and lb_obj.district:
+        d_obj = lb_obj.district
 
     # 5. Create linked User account if not already provided
     user_id = payload.user_id
@@ -268,9 +285,21 @@ def create_patient(
 
     # Automatically create DiseaseCase for patient if disease assigned
     if disease_id:
-        w_obj = db.query(Ward).filter(Ward.id == ward_id).first() if ward_id else None
-        lat = w_obj.center_latitude if w_obj and w_obj.center_latitude else 10.5276
-        lng = w_obj.center_longitude if w_obj and w_obj.center_longitude else 76.2144
+        lat = None
+        lng = None
+        if w_obj and w_obj.center_latitude is not None and w_obj.center_longitude is not None:
+            lat = float(w_obj.center_latitude)
+            lng = float(w_obj.center_longitude)
+        elif lb_obj and lb_obj.center_latitude is not None and lb_obj.center_longitude is not None:
+            lat = float(lb_obj.center_latitude)
+            lng = float(lb_obj.center_longitude)
+        elif d_obj and d_obj.center_latitude is not None and d_obj.center_longitude is not None:
+            lat = float(d_obj.center_latitude)
+            lng = float(d_obj.center_longitude)
+        else:
+            lat = 10.5276
+            lng = 76.2144
+
         new_case = DiseaseCase(
             patient_id=patient.id,
             disease_id=disease_id,
@@ -280,8 +309,8 @@ def create_patient(
             diagnosis_date=datetime.date.today(),
             latitude=lat,
             longitude=lng,
-            source="SURVEILLANCE",
-            clinical_notes=f"Clinical surveillance record for patient {patient.pseudo_id}",
+            source="STATIC_ADMIN_LOCATION" if not has_phone else "SURVEILLANCE",
+            clinical_notes=f"Clinical surveillance record for patient {patient.pseudo_id} ({'No Phone - Administrative Centroid' if not has_phone else 'GPS Active'})",
         )
         db.add(new_case)
         db.flush()
@@ -485,6 +514,20 @@ def update_patient(
                 detail="Referential integrity error: Selected ward does not belong to the selected local body",
             )
 
+    # Sync administrative hierarchy details
+    d_obj = db.query(District).filter(District.id == district_id).first() if district_id else None
+    lb_obj = db.query(LocalBody).filter(LocalBody.id == local_body_id).first() if local_body_id else None
+    w_obj = db.query(Ward).filter(Ward.id == ward_id).first() if ward_id else None
+    if d_obj:
+        patient.district_name = d_obj.name
+        patient.district_id = d_obj.id
+    if lb_obj:
+        patient.local_body_name = lb_obj.name
+        patient.local_body_id = lb_obj.id
+    if w_obj:
+        patient.ward_number = w_obj.ward_number
+        patient.ward_id = w_obj.id
+
     update_data = payload.model_dump(exclude_unset=True)
 
     # If updating email or password, sync to linked User
@@ -501,6 +544,26 @@ def update_patient(
     if "is_active" in update_data and patient.user:
         patient.user.is_active = update_data["is_active"]
 
+    # If updating phone availability
+    if "has_phone" in update_data:
+        has_phone_val = update_data.pop("has_phone")
+        patient.has_phone = has_phone_val
+        if not has_phone_val:
+            patient.contact_number = None
+
+    # Resolve coordinates from administrative hierarchy for no-phone representation
+    admin_lat = None
+    admin_lng = None
+    if w_obj and w_obj.center_latitude is not None and w_obj.center_longitude is not None:
+        admin_lat = w_obj.center_latitude
+        admin_lng = w_obj.center_longitude
+    elif lb_obj and lb_obj.center_latitude is not None and lb_obj.center_longitude is not None:
+        admin_lat = lb_obj.center_latitude
+        admin_lng = lb_obj.center_longitude
+    elif d_obj and d_obj.center_latitude is not None and d_obj.center_longitude is not None:
+        admin_lat = d_obj.center_latitude
+        admin_lng = d_obj.center_longitude
+
     # If updating disease, sync disease_name and DiseaseCase
     if "disease_id" in update_data:
         new_d_id = update_data.pop("disease_id")
@@ -514,9 +577,13 @@ def update_patient(
                 if existing_case:
                     existing_case.disease_id = new_d_id
                     existing_case.ward_id = patient.ward_id
+                    if not patient.has_phone and admin_lat is not None and admin_lng is not None:
+                        existing_case.latitude = admin_lat
+                        existing_case.longitude = admin_lng
+                        existing_case.source = "STATIC_ADMIN_LOCATION"
                 else:
-                    lat = patient.ward.center_latitude if patient.ward and patient.ward.center_latitude else 10.5276
-                    lng = patient.ward.center_longitude if patient.ward and patient.ward.center_longitude else 76.2144
+                    lat = admin_lat or 10.5276
+                    lng = admin_lng or 76.2144
                     new_case = DiseaseCase(
                         patient_id=patient.id,
                         disease_id=new_d_id,
@@ -526,20 +593,22 @@ def update_patient(
                         diagnosis_date=datetime.date.today(),
                         latitude=lat,
                         longitude=lng,
-                        source="SURVEILLANCE",
-                        clinical_notes=f"Clinical surveillance record for patient {patient.pseudo_id}",
+                        source="STATIC_ADMIN_LOCATION" if not patient.has_phone else "SURVEILLANCE",
+                        clinical_notes=f"Clinical surveillance record for patient {patient.pseudo_id} ({'No Phone - Administrative Centroid' if not patient.has_phone else 'GPS Active'})",
                     )
                     db.add(new_case)
         else:
             patient.disease_id = None
             patient.disease_name = None
+    elif not patient.has_phone and admin_lat is not None and admin_lng is not None:
+        # Sync existing DiseaseCase location if administrative hierarchy was modified
+        existing_case = db.query(DiseaseCase).filter(DiseaseCase.patient_id == patient.id).first()
+        if existing_case:
+            existing_case.ward_id = patient.ward_id
+            existing_case.latitude = admin_lat
+            existing_case.longitude = admin_lng
+            existing_case.source = "STATIC_ADMIN_LOCATION"
 
-    # If updating phone availability
-    if "has_phone" in update_data:
-        has_phone_val = update_data.pop("has_phone")
-        patient.has_phone = has_phone_val
-        if not has_phone_val:
-            patient.contact_number = None
 
     if "tracking_interval_minutes" in update_data:
         new_int = update_data.pop("tracking_interval_minutes")

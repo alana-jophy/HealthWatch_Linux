@@ -198,11 +198,20 @@ export const PatientProfileView: React.FC = () => {
               </div>
             </div>
 
-            {/* Latest GPS Telemetry Observation */}
+            {/* Location Telemetry / Administrative Location */}
             {profile.latest_latitude && profile.latest_longitude && (
               <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
-                <span className="text-[11px] font-medium text-emerald-400 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5" /> Latest GPS Observation
+                <span className={`text-[11px] font-medium flex items-center gap-1.5 ${
+                  profile.has_phone === false || profile.latest_source === 'STATIC_ADMIN_LOCATION'
+                    ? 'text-cyan-400'
+                    : 'text-emerald-400'
+                }`}>
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>
+                    {profile.has_phone === false || profile.latest_source === 'STATIC_ADMIN_LOCATION'
+                      ? 'Administrative Centroid Location (District / Panchayath / Ward)'
+                      : 'Latest GPS Observation'}
+                  </span>
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-xs">
                   <div>
@@ -210,12 +219,16 @@ export const PatientProfileView: React.FC = () => {
                     <span className="text-white font-bold">{profile.latest_latitude.toFixed(6)}, {profile.latest_longitude.toFixed(6)}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-500 block">Accuracy</span>
-                    <span className="text-emerald-400 font-bold">±{profile.latest_accuracy || 5}m</span>
+                    <span className="text-[10px] text-slate-500 block">
+                      {profile.has_phone === false ? 'Resolution' : 'Accuracy'}
+                    </span>
+                    <span className="text-cyan-400 font-bold">
+                      {profile.has_phone === false ? 'Ward Centroid' : `±${profile.latest_accuracy || 5}m`}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 block">Source</span>
-                    <span className="text-cyan-400 font-bold">{profile.latest_source || 'PATIENT_GPS'}</span>
+                    <span className="text-cyan-400 font-bold">{profile.latest_source || 'STATIC_ADMIN_LOCATION'}</span>
                   </div>
                 </div>
               </div>

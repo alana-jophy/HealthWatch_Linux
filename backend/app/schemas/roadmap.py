@@ -61,6 +61,12 @@ class PatientRoadmapResponse(BaseModel):
     disease_name: Optional[str] = None
     has_phone: bool = True
     is_static_admin_location: bool = False
+    district_name: Optional[str] = None
+    local_body_name: Optional[str] = None
+    ward_name: Optional[str] = None
+    ward_number: Optional[int] = None
+    admin_geojson: Optional[dict] = None
+    ward_geojson: Optional[dict] = None
     tracking_interval_minutes: int = 15
     tracking_days: Optional[str] = None
     session_id: Optional[uuid.UUID] = None

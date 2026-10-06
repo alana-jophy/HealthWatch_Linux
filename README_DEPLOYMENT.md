@@ -199,27 +199,83 @@ The script will:
 
 ---
 
-## 7. Packaging & Pushing Docker Images to a Container Registry (Optional)
+---
 
-If you prefer to push your images to **Docker Hub** or **GitHub Container Registry (GHCR)** rather than building on the server:
+## 7. Automated Publishing & Docker Hub Synchronization
 
+HealthWatch provides a turnkey automation script [`docker/push_to_dockerhub.sh`](file:///home/alana/Desktop/healthwatch/docker/push_to_dockerhub.sh) that:
+1. Tags all 3 microservices with your target version (and `:latest`).
+2. Pushes the Docker images to your Docker Hub repository.
+3. Automatically uploads the markdown documentation ([`docker/backend/README.md`](file:///home/alana/Desktop/healthwatch/docker/backend/README.md), [`docker/frontend/README.md`](file:///home/alana/Desktop/healthwatch/docker/frontend/README.md), and [`docker/gateway/README.md`](file:///home/alana/Desktop/healthwatch/docker/gateway/README.md)) to each Docker Hub repository overview page via Docker Hub's REST API.
+
+### Prerequisites
+
+* Build your production images first:
+  ```bash
+  ./deploy.sh build
+  # Or with a specific tag:
+  ./deploy.sh build 1.0.0
+  ```
+* A **Docker Hub Personal Access Token (PAT)** with **Read & Write** permissions (generated at [hub.docker.com/settings/security](https://hub.docker.com/settings/security)).
+
+---
+
+### Execution Modes
+
+#### Option A: Interactive Mode (Prompts for Username & Token)
 ```bash
-# 1. Build the production images locally
-./deploy.sh build
+./docker/push_to_dockerhub.sh
+```
+*Prompts for your Docker Hub username and optional Personal Access Token.*
 
-# 2. Tag with your Docker Hub username or registry
-docker tag healthwatch-gateway:1.0.0 yourusername/healthwatch-gateway:1.0.0
-docker tag healthwatch-frontend:1.0.0 yourusername/healthwatch-frontend:1.0.0
-docker tag healthwatch-backend:1.0.0 yourusername/healthwatch-backend:1.0.0
-
-# 3. Log in and push
-docker login
-docker push yourusername/healthwatch-gateway:1.0.0
-docker push yourusername/healthwatch-frontend:1.0.0
-docker push yourusername/healthwatch-backend:1.0.0
+#### Option B: Automated / CI/CD One-Liner
+```bash
+./docker/push_to_dockerhub.sh -u your-dockerhub-username -t 1.0.0 --token "dckr_pat_xxxx"
 ```
 
-On your production server, simply reference `image: yourusername/healthwatch-...:1.0.0` in `docker-compose.prod.yml` and run:
+#### Option C: Using Environment Variables
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+export DOCKERHUB_USER="your-dockerhub-username"
+export DOCKERHUB_TOKEN="dckr_pat_xxxx"
+./docker/push_to_dockerhub.sh
 ```
+
+#### Option D: Dry-Run Mode (Preview Actions Without Pushing)
+```bash
+./docker/push_to_dockerhub.sh -u your-dockerhub-username --dry-run
+```
+
+---
+
+### Script CLI Options Reference
+
+| Option | Flag | Description | Default |
+| :--- | :--- | :--- | :--- |
+| **Username** | `-u`, `--username` | Docker Hub username or organization namespace | Prompt or `$DOCKERHUB_USER` |
+| **Version Tag** | `-t`, `--tag` | Image version tag to publish | `APP_VERSION` from `.env.production` or `1.0.0` |
+| **Access Token**| `--token` | Docker Hub PAT (required for API README sync) | `$DOCKERHUB_TOKEN` or prompt |
+| **Skip README** | `--skip-readme` | Push Docker images only, skip API docs upload | `false` |
+| **Dry Run** | `--dry-run` | Print commands without executing | `false` |
+| **Help** | `-h`, `--help` | Display script usage and examples | |
+
+---
+
+### Deploying Anywhere Using Published Docker Hub Images
+
+Once published, you can deploy the complete stack onto any remote server using [`docker/docker-compose.hub.yml`](file:///home/alana/Desktop/healthwatch/docker/docker-compose.hub.yml) without needing the source code:
+
+```bash
+# 1. Download production hub compose and environment template
+curl -O https://raw.githubusercontent.com/alana-jophy/HealthWatch_Linux/main/docker/docker-compose.hub.yml
+curl -O https://raw.githubusercontent.com/alana-jophy/HealthWatch_Linux/main/docker/env.fullstack.sample
+cp env.fullstack.sample .env
+
+# 2. Configure .env with your Docker Hub user and domain
+# In .env:
+# DOCKERHUB_USER=your-dockerhub-username
+# DOMAIN_NAME=healthwatch.example.com
+
+# 3. Launch stack
+docker compose -f docker-compose.hub.yml up -d
+```
+

@@ -73,6 +73,13 @@ postgres_data/
 *.db
 *.sqlite
 
+# Database Dumps & Backups (Allow production dumps to be tracked and pushed to remote repo)
+!database/backups/
+!database/backups/*.sql
+!database/backups/*.sql.gz
+!database/backups/**
+!*.sql.gz
+
 # SSL Certificates & Secrets
 *.pem
 *.key

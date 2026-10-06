@@ -73,36 +73,73 @@ docker/
 
 ## Pushing Images & READMEs to Docker Hub
 
-The automation script `push_to_dockerhub.sh` handles:
-1. Tagging local images (`1.0.0` and `latest`).
-2. Pushing all images to your Docker Hub repository.
-3. Authenticating with Docker Hub's REST API to update the **Repository Overview (README)** for all 3 images automatically.
+The automation script [`push_to_dockerhub.sh`](file:///home/alana/Desktop/healthwatch/docker/push_to_dockerhub.sh) handles:
+1. **Image Validation**: Checks that local microservices are built and ready.
+2. **Tagging**: Tags each local image with both your chosen version tag (`:${VERSION_TAG}`) and `:latest`.
+3. **Registry Push**: Pushes all images to your Docker Hub repository via `docker push`.
+4. **Automated Documentation Sync**: Authenticates with Docker Hub's v2 REST API to automatically update the **Repository Overview (README)** for all 3 images with their respective markdown documentation ([`docker/backend/README.md`](file:///home/alana/Desktop/healthwatch/docker/backend/README.md), [`docker/frontend/README.md`](file:///home/alana/Desktop/healthwatch/docker/frontend/README.md), and [`docker/gateway/README.md`](file:///home/alana/Desktop/healthwatch/docker/gateway/README.md)).
 
-### Option 1: Interactive Execution
+### Prerequisites
+
+1. Build images locally first:
+   ```bash
+   ./deploy.sh build
+   # Or with a specific version:
+   ./deploy.sh build 1.0.0
+   ```
+2. Generate a **Docker Hub Personal Access Token (PAT)**:
+   - Go to: [hub.docker.com/settings/security](https://hub.docker.com/settings/security)
+   - Click **New Access Token**
+   - Access Permissions: **Read & Write** (required to update repository descriptions)
+
+---
+
+### Command-Line Options Reference
+
+| Option | Shorthand | Description | Default |
+| :--- | :--- | :--- | :--- |
+| `--username <name>` | `-u` | Docker Hub username or org namespace | Prompts or reads `$DOCKERHUB_USER` |
+| `--tag <version>` | `-t` | Version tag to push (also tags `:latest`) | `APP_VERSION` from `.env.production` or `1.0.0` |
+| `--token <token>` | | Personal Access Token or password | Prompts or reads `$DOCKERHUB_TOKEN` |
+| `--skip-readme` | | Push images only; skip updating READMEs | `false` |
+| `--dry-run` | | Print commands without executing | `false` |
+| `--help` | `-h` | Display usage manual and examples | |
+
+---
+
+### Execution Examples
+
+#### 1. Interactive Mode
 ```bash
 ./docker/push_to_dockerhub.sh
 ```
-The script will prompt for:
-- Docker Hub Username / Organization
-- Docker Hub Personal Access Token (PAT) with `Read & Write` permissions (or press ENTER to skip README API update)
+*Prompts for your Docker Hub username and your PAT.*
 
-### Option 2: Automated CI/CD Execution
+#### 2. Fully Automated (CI/CD / Scripted)
 ```bash
-# Export credentials
-export DOCKERHUB_USER="your-dockerhub-username"
-export DOCKERHUB_TOKEN="dckr_pat_xxxxxxxxxxxxxxxxxxxxxxxxxx"
-
-# Run publisher
-./docker/push_to_dockerhub.sh -u "$DOCKERHUB_USER" --token "$DOCKERHUB_TOKEN" --tag 1.0.0
+./docker/push_to_dockerhub.sh -u mydockerhubuser -t 1.0.0 --token "dckr_pat_xxxx"
 ```
 
-### Option 3: Dry-Run (Preview Actions)
+#### 3. Using Environment Variables
 ```bash
-./docker/push_to_dockerhub.sh -u your-dockerhub-username --dry-run
+export DOCKERHUB_USER="mydockerhubuser"
+export DOCKERHUB_TOKEN="dckr_pat_xxxx"
+./docker/push_to_dockerhub.sh
 ```
 
-> **Note on Docker Hub Personal Access Tokens (PAT)**:
-> Generate a token at [Docker Hub Security Settings](https://hub.docker.com/settings/security) with **Read & Write** access.
+#### 4. Preview Execution (Dry-Run)
+```bash
+./docker/push_to_dockerhub.sh -u mydockerhubuser --dry-run
+```
+
+---
+
+### How the Automated README Sync Works
+
+Docker images themselves do not store repository overview pages. The script interacts with Docker Hub's API:
+1. **Authentication**: Calls `POST https://hub.docker.com/v2/users/login/` with your credentials to obtain a secure session JWT.
+2. **Dynamic Customization**: Reads the service's `README.md` and dynamically substitutes any `YOUR_DOCKERHUB_USERNAME` placeholders with your actual username so all copy-pasteable commands in Docker Hub refer directly to your repository!
+3. **Overview Update**: Sends `PATCH https://hub.docker.com/v2/repositories/<username>/<repo>/` with the payload `{"full_description": "<markdown_content>"}`.
 
 ---
 

@@ -66,7 +66,7 @@ def check_db_connection() -> dict:
             }
     except Exception as exc:
         latency_ms = round((time.time() - start_time) * 1000, 2)
-        logger.warning(f"Database health check failed: {exc}")
+        logger.error(f"Database health check failed: {exc}")
         return {
             "status": "disconnected",
             "error": str(exc),

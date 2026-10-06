@@ -38,9 +38,9 @@ async def lifespan(app: FastAPI):
         try:
             init_db()
         except Exception as exc:
-            logger.warning(f"Database initialization notice: {exc}")
+            logger.error(f"Database initialization failed: {exc}")
     else:
-        logger.warning(f"Database initial check: {db_check.get('status')} - {db_check.get('error')}")
+        logger.error(f"CRITICAL: Database startup check failed: {db_check.get('status')} - {db_check.get('error')}")
 
     yield
 

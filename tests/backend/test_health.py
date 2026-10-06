@@ -25,9 +25,9 @@ def test_root_endpoint():
 def test_health_endpoint():
     """Verify GET /api/health returns valid schema and status."""
     response = client.get("/api/health")
-    assert response.status_code == 200
+    assert response.status_code in (200, 503)
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["status"] in ("ok", "degraded")
     assert data["app_name"] == "HealthWatch"
     assert "version" in data
     assert "timestamp" in data

@@ -46,7 +46,7 @@ def setup_logging() -> None:
     # Intercept standard library loggers
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-    for _log in ["uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "sqlalchemy.engine"]:
+    for _log in ["uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "sqlalchemy.engine", "gunicorn", "gunicorn.error", "gunicorn.access"]:
         _logger = logging.getLogger(_log)
         _logger.handlers = [InterceptHandler()]
         _logger.propagate = False

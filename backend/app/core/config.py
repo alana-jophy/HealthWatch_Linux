@@ -59,17 +59,21 @@ class Settings(BaseSettings):
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, str) and v.startswith("["):
-            try:
-                parsed = json.loads(v)
-                if isinstance(parsed, list):
-                    return parsed
-            except Exception:
-                pass
+        if isinstance(v, str):
+            v_clean = v.strip()
+            if v_clean.startswith("[") and v_clean.endswith("]"):
+                try:
+                    parsed = json.loads(v_clean)
+                    if isinstance(parsed, list):
+                        return [str(item).strip() for item in parsed if str(item).strip()]
+                except Exception:
+                    # Strip outer brackets and split by comma if not valid JSON quotes
+                    v_clean = v_clean[1:-1]
+            origins = [i.strip().strip("'\"") for i in v_clean.split(",") if i.strip().strip("'\"")]
+            if origins:
+                return origins
         elif isinstance(v, list):
-            return v
+            return [str(i).strip() for i in v if str(i).strip()]
         return ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     @field_validator("DATABASE_URL", mode="before")

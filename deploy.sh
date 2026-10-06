@@ -115,25 +115,36 @@ start_https() {
         exit 1
     fi
 
-    # Step A: Start in HTTP mode so Nginx can respond to the ACME challenge
-    echo -e "${CYAN}Step A: Starting Gateway in HTTP mode for ACME challenge...${NC}"
-    sed -i 's/^ENABLE_HTTPS=.*/ENABLE_HTTPS=false/' "$ENV_FILE"
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d gateway
-
-    # Step B: Request Let's Encrypt Certificate
-    echo -e "${CYAN}Step B: Requesting Let's Encrypt SSL certificate for '${DOMAIN_NAME}'...${NC}"
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm --entrypoint "\
-        certbot certonly --webroot -w /var/www/certbot \
-        --email ${SSL_EMAIL} \
-        -d ${DOMAIN_NAME} \
-        --rsa-key-size 4096 \
-        --agree-tos \
-        --force-renewal \
-        --non-interactive" certbot
-
-    # Step C: Enable HTTPS and restart gateway
-    echo -e "${CYAN}Step C: Enabling HTTPS mode and reloading Gateway...${NC}"
+    # Ensure ENABLE_HTTPS is set to true in environment configuration
     sed -i 's/^ENABLE_HTTPS=.*/ENABLE_HTTPS=true/' "$ENV_FILE"
+
+    # Check if a valid certificate already exists in the docker volume or gateway
+    HAS_EXISTING_CERT=false
+    if docker run --rm -v healthwatch_linux_certbot_conf:/etc/letsencrypt alpine test -f "/etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem" 2>/dev/null; then
+        HAS_EXISTING_CERT=true
+    fi
+
+    if [ "$HAS_EXISTING_CERT" = "true" ]; then
+        echo -e "${GREEN}✓ Existing SSL/TLS certificate detected for '${DOMAIN_NAME}'. Reusing existing certificate.${NC}"
+    else
+        # Step A: Start Gateway in HTTP mode so Nginx can respond to the ACME challenge
+        echo -e "${CYAN}Step A: Starting Gateway in HTTP mode for ACME challenge...${NC}"
+        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d gateway
+
+        # Step B: Request Let's Encrypt Certificate
+        echo -e "${CYAN}Step B: Requesting Let's Encrypt SSL certificate for '${DOMAIN_NAME}'...${NC}"
+        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" run --rm --entrypoint "\
+            certbot certonly --webroot -w /var/www/certbot \
+            --email ${SSL_EMAIL} \
+            -d ${DOMAIN_NAME} \
+            --rsa-key-size 4096 \
+            --agree-tos \
+            --keep-until-expiring \
+            --non-interactive" certbot
+    fi
+
+    # Step C: Enable HTTPS and start/reload microservices
+    echo -e "${CYAN}Step C: Launching microservices in HTTPS mode...${NC}"
     APP_VERSION="${APP_VERSION}" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
 
     echo -e "\n${BLUE}[4/4] Verifying microservice health status...${NC}"

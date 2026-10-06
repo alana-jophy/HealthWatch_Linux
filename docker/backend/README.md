@@ -38,6 +38,9 @@ All parameters are configurable via an `.env` file or container environment vari
 | `BACKEND_CORS_ORIGINS` | JSON Array | `["*"]` | No | Allowed CORS origin URLs (e.g. `["https://healthwatch.example.com"]`) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Integer | `1440` | No | Validity duration of session JWT access tokens in minutes (1440 = 24 hours) |
 | `PASSWORD_RESET_TOKEN_EXPIRE_HOURS` | Integer | `24` | No | Validity duration of password change tokens in hours |
+| `ADMIN_EMAIL` | String | `admin@healthwatch.org` | No | Primary administrator account login email |
+| `ADMIN_PASSWORD` | String | `Admin@HealthWatch2026` | No | Primary administrator account login password |
+| `ADMIN_NAME` | String | `System Administrator` | No | Administrator display name |
 | `LOCATION_SAMPLING_INTERVAL_MINUTES`| Integer | `15` | No | Default surveillance discrete sampling interval in minutes |
 | `PROXIMITY_ALERT_THRESHOLD_METERS` | Float | `50.0` | No | Contact proximity detection radius in meters |
 | `STATIONARY_DRIFT_THRESHOLD_METERS` | Float | `50.0` | No | Maximum GPS displacement considered stationary device drift |
@@ -60,6 +63,11 @@ API_V1_STR=/api/v1
 SECRET_KEY=9a4f2c1b8e7d3a5f6e8c0b2d4f6a8b1c3e5d7f9a1b3c5e7d9f1a3b5c7e9d1b3f
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
 PASSWORD_RESET_TOKEN_EXPIRE_HOURS=24
+
+# Initial Administrator Credentials
+ADMIN_EMAIL=admin@healthwatch.org
+ADMIN_PASSWORD=Admin@HealthWatch2026
+ADMIN_NAME=System Administrator
 
 # Database Connection
 DATABASE_URL=postgresql://healthwatch_admin:HealthWatch_Prod_Secret_Pass_2026!@db:5432/healthwatch_db

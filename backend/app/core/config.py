@@ -1,6 +1,6 @@
 import json
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AliasChoices, AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "healthwatch_super_secret_development_key_32_characters_long"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+
+    # Administrator User Configuration (Configurable via .env)
+    ADMIN_EMAIL: str = Field(
+        default="admin@healthwatch.org",
+        validation_alias=AliasChoices("ADMIN_EMAIL", "FIRST_SUPERUSER_EMAIL"),
+    )
+    ADMIN_PASSWORD: str = Field(
+        default="Admin@HealthWatch2026",
+        validation_alias=AliasChoices("ADMIN_PASSWORD", "FIRST_SUPERUSER_PASSWORD"),
+    )
+    ADMIN_NAME: str = Field(
+        default="System Administrator",
+        validation_alias=AliasChoices("ADMIN_NAME", "FIRST_SUPERUSER_NAME"),
+    )
 
     # Location Telemetry Sampling Configuration (15 minutes = 900 seconds)
     LOCATION_SAMPLING_INTERVAL_SECONDS: int = 900

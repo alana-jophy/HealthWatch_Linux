@@ -118,15 +118,42 @@ POSTGRES_PASSWORD=YourStrongDatabasePassword123!
 POSTGRES_DB=healthwatch_db
 DATABASE_URL=postgresql://healthwatch_admin:YourStrongDatabasePassword123!@db:5432/healthwatch_db
 
-# 5. Security & Concurrency
-SECRET_KEY=e2425e1a9c2592bc67cd4ca08dd470d84462af8ba9bcda3ce77c5b73855cd4e3
-WORKERS=4
-BACKEND_CORS_ORIGINS=["http://healthwatch.yourdomain.com","https://healthwatch.yourdomain.com"]
+# 6. Default Admin Account
+ADMIN_EMAIL=admin@healthwatch.org
+ADMIN_PASSWORD=YourSecureAdminPassword123!
+ADMIN_NAME=System Administrator
 ```
 
 ---
 
-## 5. Launching the Microservices
+## 5. Image Versioning & Build Tagging
+
+You can specify the Docker image version/tag in three different ways:
+
+1. **In `.env.production` (Persistent)**:
+   ```env
+   APP_VERSION=1.2.0
+   ```
+2. **Directly in the CLI (On the fly)**:
+   ```bash
+   # Build with specific tag:
+   ./deploy.sh build 1.2.0
+   # Or launch directly with specific tag:
+   ./deploy.sh http 1.2.0
+   ./deploy.sh https 1.2.0
+   # Or using the -t / -v flag:
+   ./deploy.sh build -t 1.2.0
+   ```
+3. **Via CLI Environment Variable**:
+   ```bash
+   APP_VERSION=1.2.0 ./deploy.sh build
+   ```
+
+*Every build automatically tags the image with both your custom version tag (e.g. `healthwatch-backend:1.2.0`) and `latest` (`healthwatch-backend:latest`).*
+
+---
+
+## 6. Launching the Microservices
 
 The included [`deploy.sh`](file:///home/alana/Desktop/healthwatch/deploy.sh) script handles compilation, configuration, and startup.
 

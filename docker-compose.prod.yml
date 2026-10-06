@@ -40,7 +40,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    image: healthwatch-backend:1.0.0
+    image: healthwatch-backend:${APP_VERSION:-1.0.0}
     container_name: healthwatch-backend
     restart: always
     environment:
@@ -53,6 +53,9 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-healthwatch_admin}:${POSTGRES_PASSWORD:-HealthWatch_Prod_Secret_Pass_2026!}@db:5432/${POSTGRES_DB:-healthwatch_db}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["*"]}
       - WORKERS=${WORKERS:-4}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@healthwatch.org}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@HealthWatch2026}
+      - ADMIN_NAME=${ADMIN_NAME:-System Administrator}
     depends_on:
       db:
         condition: service_healthy
@@ -77,7 +80,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.prod
-    image: healthwatch-frontend:1.0.0
+    image: healthwatch-frontend:${APP_VERSION:-1.0.0}
     container_name: healthwatch-frontend
     restart: always
     depends_on:
@@ -104,7 +107,7 @@ services:
     build:
       context: ./gateway
       dockerfile: Dockerfile
-    image: healthwatch-gateway:1.0.0
+    image: healthwatch-gateway:${APP_VERSION:-1.0.0}
     container_name: healthwatch-gateway
     restart: always
     ports:

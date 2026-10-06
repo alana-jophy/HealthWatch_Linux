@@ -21,10 +21,18 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Detect default version from .env.production or .env
+DETECTED_VERSION=""
+if [[ -f "${PROJECT_ROOT}/.env.production" ]]; then
+    DETECTED_VERSION="$(grep -E '^APP_VERSION=' "${PROJECT_ROOT}/.env.production" | cut -d '=' -f2- | tr -d ' "\r' || true)"
+elif [[ -f "${PROJECT_ROOT}/.env" ]]; then
+    DETECTED_VERSION="$(grep -E '^APP_VERSION=' "${PROJECT_ROOT}/.env" | cut -d '=' -f2- | tr -d ' "\r' || true)"
+fi
+
 # Default configurations
 DOCKERHUB_USER="${DOCKERHUB_USER:-}"
 DOCKERHUB_TOKEN="${DOCKERHUB_TOKEN:-${DOCKERHUB_PASSWORD:-}}"
-VERSION_TAG="${VERSION_TAG:-1.0.0}"
+VERSION_TAG="${VERSION_TAG:-${DETECTED_VERSION:-1.0.0}}"
 DRY_RUN=false
 SKIP_README=false
 

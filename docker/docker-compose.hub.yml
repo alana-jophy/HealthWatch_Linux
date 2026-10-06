@@ -37,7 +37,7 @@ services:
   # 2. Backend: FastAPI + Gunicorn Multi-Worker (Pulled from Docker Hub)
   # ----------------------------------------------------------------------------
   backend:
-    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-backend:${HEALTHWATCH_VERSION:-1.0.0}
+    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-backend:${HEALTHWATCH_VERSION:-${APP_VERSION:-1.0.0}}
     container_name: healthwatch-backend
     restart: always
     environment:
@@ -50,6 +50,9 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-healthwatch_admin}:${POSTGRES_PASSWORD:-HealthWatch_Prod_Secret_Pass_2026!}@db:5432/${POSTGRES_DB:-healthwatch_db}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["*"]}
       - WORKERS=${WORKERS:-4}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@healthwatch.org}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@HealthWatch2026}
+      - ADMIN_NAME=${ADMIN_NAME:-System Administrator}
     depends_on:
       db:
         condition: service_healthy
@@ -71,7 +74,7 @@ services:
   # 3. Frontend: React 18 + Nginx Static Server (Pulled from Docker Hub)
   # ----------------------------------------------------------------------------
   frontend:
-    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-frontend:${HEALTHWATCH_VERSION:-1.0.0}
+    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-frontend:${HEALTHWATCH_VERSION:-${APP_VERSION:-1.0.0}}
     container_name: healthwatch-frontend
     restart: always
     depends_on:
@@ -95,7 +98,7 @@ services:
   # 4. API Gateway: Nginx Reverse Proxy & SSL (Pulled from Docker Hub)
   # ----------------------------------------------------------------------------
   gateway:
-    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-gateway:${HEALTHWATCH_VERSION:-1.0.0}
+    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-gateway:${HEALTHWATCH_VERSION:-${APP_VERSION:-1.0.0}}
     container_name: healthwatch-gateway
     restart: always
     ports:

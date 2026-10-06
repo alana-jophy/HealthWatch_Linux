@@ -4,6 +4,7 @@ from loguru import logger
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import get_password_hash
 from app.db.base import Base
 from app.db.session import engine, SessionLocal
@@ -24,15 +25,8 @@ INITIAL_ROLES = [
     {"name": RoleEnum.PATIENT.value, "description": "Patient user under authorized quarantine/surveillance"},
 ]
 
-# Initial synthetic test users
+# Initial synthetic test users (Non-Admin users; Admin is loaded dynamically from settings)
 SYNTHETIC_USERS = [
-    {
-        "email": "admin@healthwatch.org",
-        "password": "Admin@HealthWatch2026",
-        "full_name": "System Administrator",
-        "role": RoleEnum.ADMIN.value,
-        "is_superuser": True,
-    },
     {
         "email": "officer.surveillance@healthwatch.org",
         "password": "Officer@HealthWatch2026",
@@ -590,9 +584,42 @@ def init_db(db: Session = None) -> None:
                 role_map[role.name] = role
             db.commit()
 
-            # 2. Seed Synthetic Users
+            # 2. Seed / Update Administrator User from Environment Settings
             user_map = {}
+            admin_role = role_map.get(RoleEnum.ADMIN.value)
+            admin_user = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
+            if not admin_user:
+                # Check if a superuser was created under a prior email address (e.g. initial seed)
+                admin_user = db.query(User).filter(User.is_superuser == True).first()
+                if admin_user:
+                    logger.info(f"Synchronizing existing superuser email to: {settings.ADMIN_EMAIL}")
+                    admin_user.email = settings.ADMIN_EMAIL
+                else:
+                    admin_user = User(
+                        email=settings.ADMIN_EMAIL,
+                        full_name=settings.ADMIN_NAME,
+                        is_active=True,
+                        is_superuser=True,
+                        must_change_password=False,
+                    )
+                    db.add(admin_user)
+
+            # Ensure admin password, full name, role, and active status are synchronized with environment
+            admin_user.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+            admin_user.full_name = settings.ADMIN_NAME
+            admin_user.is_active = True
+            admin_user.is_superuser = True
+            admin_user.must_change_password = False
+            if admin_role:
+                admin_user.role_id = admin_role.id
+            db.flush()
+            user_map[admin_user.email] = admin_user
+            logger.info(f"System administrator account synchronized for: {admin_user.email}")
+
+            # Seed Remaining Synthetic Test Users
             for u_data in SYNTHETIC_USERS:
+                if u_data["email"] == admin_user.email:
+                    continue
                 user = db.query(User).filter(User.email == u_data["email"]).first()
                 role_obj = role_map.get(u_data["role"])
                 if not user:
@@ -602,7 +629,7 @@ def init_db(db: Session = None) -> None:
                         full_name=u_data["full_name"],
                         role_id=role_obj.id if role_obj else None,
                         is_active=True,
-                        is_superuser=u_data["is_superuser"],
+                        is_superuser=u_data.get("is_superuser", False),
                     )
                     db.add(user)
                     db.flush()

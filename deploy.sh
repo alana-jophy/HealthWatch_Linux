@@ -60,6 +60,8 @@ load_env() {
     DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
     ENABLE_HTTPS="${ENABLE_HTTPS:-false}"
     SSL_EMAIL="${SSL_EMAIL:-admin@example.com}"
+    APP_VERSION="${CUSTOM_VERSION:-${APP_VERSION:-1.0.0}}"
+    export APP_VERSION
 }
 
 build_apk() {
@@ -71,18 +73,24 @@ build_apk() {
 
 build_images() {
     build_apk
-    echo -e "\n${BLUE}[2/4] Building production microservices Docker images...${NC}"
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
-    echo -e "${GREEN}✓ Production Docker images built successfully:${NC}"
-    echo -e "   - healthwatch-gateway:1.0.0"
-    echo -e "   - healthwatch-frontend:1.0.0"
-    echo -e "   - healthwatch-backend:1.0.0"
+    echo -e "\n${BLUE}[2/4] Building production microservices Docker images (Tag: ${APP_VERSION})...${NC}"
+    APP_VERSION="${APP_VERSION}" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
+    
+    # Tag each built image with both the specific version and 'latest'
+    docker tag "healthwatch-gateway:${APP_VERSION}" "healthwatch-gateway:latest" 2>/dev/null || true
+    docker tag "healthwatch-frontend:${APP_VERSION}" "healthwatch-frontend:latest" 2>/dev/null || true
+    docker tag "healthwatch-backend:${APP_VERSION}" "healthwatch-backend:latest" 2>/dev/null || true
+
+    echo -e "${GREEN}✓ Production Docker images built and tagged successfully:${NC}"
+    echo -e "   - healthwatch-gateway:${APP_VERSION} (and latest)"
+    echo -e "   - healthwatch-frontend:${APP_VERSION} (and latest)"
+    echo -e "   - healthwatch-backend:${APP_VERSION} (and latest)"
 }
 
 start_http() {
     echo -e "\n${BLUE}[3/4] Launching HealthWatch in HTTP Mode (Port 80)...${NC}"
     sed -i 's/^ENABLE_HTTPS=.*/ENABLE_HTTPS=false/' "$ENV_FILE"
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
+    APP_VERSION="${APP_VERSION}" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
 
     echo -e "\n${BLUE}[4/4] Verifying microservice health status...${NC}"
     sleep 5
@@ -126,7 +134,7 @@ start_https() {
     # Step C: Enable HTTPS and restart gateway
     echo -e "${CYAN}Step C: Enabling HTTPS mode and reloading Gateway...${NC}"
     sed -i 's/^ENABLE_HTTPS=.*/ENABLE_HTTPS=true/' "$ENV_FILE"
-    docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
+    APP_VERSION="${APP_VERSION}" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --remove-orphans
 
     echo -e "\n${BLUE}[4/4] Verifying microservice health status...${NC}"
     sleep 5
@@ -160,11 +168,31 @@ show_logs() {
 # ------------------------------------------------------------------------------
 # Entrypoint Dispatcher
 # ------------------------------------------------------------------------------
+CUSTOM_VERSION=""
+
+# Support flags: -v <tag>, -t <tag>, --version <tag>, or passing tag as second argument
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -v|--version|-t|--tag)
+            CUSTOM_VERSION="$2"
+            shift 2
+            ;;
+        *)
+            if [[ -z "${ACTION:-}" ]]; then
+                ACTION="$1"
+            elif [[ -z "$CUSTOM_VERSION" ]]; then
+                CUSTOM_VERSION="$1"
+            fi
+            shift
+            ;;
+    esac
+done
+
 print_banner
 check_prerequisites
 load_env
 
-ACTION="${1:-}"
+ACTION="${ACTION:-}"
 
 case "$ACTION" in
     http)
@@ -191,17 +219,18 @@ case "$ACTION" in
         show_logs
         ;;
     *)
-        echo -e "\nUsage: $0 {http|https|build|apk|stop|status|logs}"
-        echo -e "  ${CYAN}./deploy.sh http${NC}    - Build and launch in HTTP mode on port 80 (Direct IP / domain / load-balancer)"
-        echo -e "  ${CYAN}./deploy.sh https${NC}   - Build and launch in HTTPS mode with automated Let's Encrypt SSL on port 443"
-        echo -e "  ${CYAN}./deploy.sh apk${NC}     - Compile Android APK with domain injected from .env configuration"
-        echo -e "  ${CYAN}./deploy.sh build${NC}   - Build all production Docker images"
-        echo -e "  ${CYAN}./deploy.sh stop${NC}    - Stop all production containers"
-        echo -e "  ${CYAN}./deploy.sh status${NC}  - Show running containers and health checks"
-        echo -e "  ${CYAN}./deploy.sh logs${NC}    - Tail live logs from all microservices"
+        echo -e "\nUsage: $0 {http|https|build|apk|stop|status|logs} [version_tag]"
+        echo -e "  ${CYAN}./deploy.sh build [tag]${NC} - Build production Docker images with specific tag (default: from .env or 1.0.0)"
+        echo -e "  ${CYAN}./deploy.sh http [tag]${NC}  - Build and launch in HTTP mode on port 80"
+        echo -e "  ${CYAN}./deploy.sh https [tag]${NC} - Build and launch in HTTPS mode with automated Let's Encrypt SSL on port 443"
+        echo -e "  ${CYAN}./deploy.sh apk${NC}         - Compile Android APK with domain injected from .env configuration"
+        echo -e "  ${CYAN}./deploy.sh stop${NC}        - Stop all production containers"
+        echo -e "  ${CYAN}./deploy.sh status${NC}      - Show running containers and health checks"
+        echo -e "  ${CYAN}./deploy.sh logs${NC}        - Tail live logs from all microservices"
         echo -e ""
         echo -e "Current Configuration ($ENV_FILE):"
         echo -e "  Domain:         ${YELLOW}${DOMAIN_NAME}${NC}"
+        echo -e "  Version Tag:    ${YELLOW}${APP_VERSION}${NC}"
         echo -e "  HTTPS Enabled:  ${YELLOW}${ENABLE_HTTPS}${NC}"
         echo -e "  SSL Email:      ${YELLOW}${SSL_EMAIL}${NC}"
         echo -e ""

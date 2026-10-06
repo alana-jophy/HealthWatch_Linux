@@ -42,6 +42,9 @@ services:
       - SECRET_KEY=${SECRET_KEY:-change_this_to_a_super_secret_key_in_production_minimum_32_chars}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-healthwatch_user}:${POSTGRES_PASSWORD:-healthwatch_secure_password_123}@db:5432/${POSTGRES_DB:-healthwatch_db}
       - BACKEND_CORS_ORIGINS=["http://localhost:5173","http://localhost:3000","http://127.0.0.1:5173"]
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@healthwatch.org}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin@HealthWatch2026}
+      - ADMIN_NAME=${ADMIN_NAME:-System Administrator}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

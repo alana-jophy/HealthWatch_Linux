@@ -218,15 +218,25 @@ case "$ACTION" in
     logs)
         show_logs
         ;;
+    import-wards|seed-wards)
+        echo -e "\n${BLUE}Importing official Kerala wards from CSV into database...${NC}"
+        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec backend python -m app.scripts.import_official_kerala_wards
+        ;;
+    verify-wards)
+        echo -e "\n${BLUE}Verifying Kerala administrative spatial hierarchy in database...${NC}"
+        docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec backend python -m app.scripts.verify_kerala_wards
+        ;;
     *)
-        echo -e "\nUsage: $0 {http|https|build|apk|stop|status|logs} [version_tag]"
-        echo -e "  ${CYAN}./deploy.sh build [tag]${NC} - Build production Docker images with specific tag (default: from .env or 1.0.0)"
-        echo -e "  ${CYAN}./deploy.sh http [tag]${NC}  - Build and launch in HTTP mode on port 80"
-        echo -e "  ${CYAN}./deploy.sh https [tag]${NC} - Build and launch in HTTPS mode with automated Let's Encrypt SSL on port 443"
-        echo -e "  ${CYAN}./deploy.sh apk${NC}         - Compile Android APK with domain injected from .env configuration"
-        echo -e "  ${CYAN}./deploy.sh stop${NC}        - Stop all production containers"
-        echo -e "  ${CYAN}./deploy.sh status${NC}      - Show running containers and health checks"
-        echo -e "  ${CYAN}./deploy.sh logs${NC}        - Tail live logs from all microservices"
+        echo -e "\nUsage: $0 {http|https|build|apk|stop|status|logs|import-wards|verify-wards} [version_tag]"
+        echo -e "  ${CYAN}./deploy.sh build [tag]${NC}        - Build production Docker images with specific tag"
+        echo -e "  ${CYAN}./deploy.sh http [tag]${NC}         - Build and launch in HTTP mode on port 80"
+        echo -e "  ${CYAN}./deploy.sh https [tag]${NC}        - Build and launch in HTTPS mode with Let's Encrypt SSL on port 443"
+        echo -e "  ${CYAN}./deploy.sh apk${NC}                - Compile Android APK with domain injected from .env configuration"
+        echo -e "  ${CYAN}./deploy.sh import-wards${NC}       - Import official_kerala_wards.csv into PostgreSQL/PostGIS database"
+        echo -e "  ${CYAN}./deploy.sh verify-wards${NC}       - Run complete integrity check on all districts, local bodies, and wards"
+        echo -e "  ${CYAN}./deploy.sh stop${NC}               - Stop all production containers"
+        echo -e "  ${CYAN}./deploy.sh status${NC}             - Show running containers and health checks"
+        echo -e "  ${CYAN}./deploy.sh logs${NC}               - Tail live logs from all microservices"
         echo -e ""
         echo -e "Current Configuration ($ENV_FILE):"
         echo -e "  Domain:         ${YELLOW}${DOMAIN_NAME}${NC}"

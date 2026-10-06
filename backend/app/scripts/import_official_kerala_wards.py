@@ -6,8 +6,13 @@ import time
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-# Add app to path
-sys.path.insert(0, "/app")
+# Add app and backend root to path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
 
 from app.core.config import settings
 from app.db.base import Base
@@ -206,9 +211,9 @@ def import_official_wards(session=None):
 
 
         # Step 3: Clean up any legacy demo wards without official ward_code
-        session.execute(text("UPDATE disease_cases SET ward_id = NULL WHERE ward_id IN (SELECT id FROM wards WHERE ward_code IS NULL);"))
-        session.execute(text("UPDATE patients SET ward_id = NULL WHERE ward_id IN (SELECT id FROM wards WHERE ward_code IS NULL);"))
-        session.execute(text("DELETE FROM wards WHERE ward_code IS NULL;"))
+        session.execute(text("UPDATE disease_cases SET ward_id = NULL WHERE ward_id IN (SELECT id FROM wards WHERE ward_code IS NULL OR trim(ward_code) = '');"))
+        session.execute(text("UPDATE patients SET ward_id = NULL WHERE ward_id IN (SELECT id FROM wards WHERE ward_code IS NULL OR trim(ward_code) = '');"))
+        session.execute(text("DELETE FROM wards WHERE ward_code IS NULL OR trim(ward_code) = '';"))
         session.commit()
 
         # Step 4: Bulk insert all 23,573 official wards if not already imported

@@ -3,7 +3,13 @@ import sys
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-sys.path.insert(0, "/app")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+backend_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+if "/app" not in sys.path:
+    sys.path.insert(0, "/app")
+
 from app.core.config import settings
 from app.models.spatial import District, LocalBody, Ward
 

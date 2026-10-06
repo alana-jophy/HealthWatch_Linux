@@ -99,6 +99,12 @@ def login_user(
     identifier = payload.email.strip()
     user = db.query(User).filter(User.email == identifier.lower()).first()
 
+    # 1. Allow administrator to authenticate using username "admin", "administrator", or configured ADMIN_EMAIL
+    if not user and identifier.lower() in ("admin", "administrator"):
+        user = db.query(User).filter(
+            (User.email == settings.ADMIN_EMAIL.lower()) | (User.is_superuser == True)
+        ).first()
+
     linked_patient = None
     if not user:
         # Check if identifier matches a Patient Account ID (pseudo_id)
@@ -128,7 +134,35 @@ def login_user(
     if not linked_patient and user:
         linked_patient = db.query(Patient).filter(Patient.user_id == user.id).first()
 
-    if not user or not verify_password(payload.password, user.hashed_password):
+    # 2. If superuser does not exist in DB yet, auto-provision on first matching login from settings
+    if not user and identifier.lower() in ("admin", "administrator", settings.ADMIN_EMAIL.lower()):
+        if payload.password == settings.ADMIN_PASSWORD:
+            admin_role = db.query(Role).filter(Role.name == RoleEnum.ADMIN.value).first()
+            user = User(
+                email=settings.ADMIN_EMAIL.lower(),
+                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
+                full_name=settings.ADMIN_NAME,
+                role_id=admin_role.id if admin_role else None,
+                is_active=True,
+                is_superuser=True,
+                must_change_password=False,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+    # 3. Validate password (and automatically synchronize if ADMIN_PASSWORD was updated in .env)
+    is_valid_password = False
+    if user:
+        if verify_password(payload.password, user.hashed_password):
+            is_valid_password = True
+        elif user.is_superuser and payload.password == settings.ADMIN_PASSWORD:
+            logger.info(f"Synchronizing updated ADMIN_PASSWORD from environment for superuser: {user.email}")
+            user.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+            db.commit()
+            is_valid_password = True
+
+    if not user or not is_valid_password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

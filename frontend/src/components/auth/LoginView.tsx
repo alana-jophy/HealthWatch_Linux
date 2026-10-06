@@ -91,7 +91,7 @@ export const LoginView: React.FC = () => {
                   required
                   autoCapitalize="none"
                   autoCorrect="off"
-                  placeholder="e.g. email@domain.com, Patient ID, or Phone"
+                  placeholder="admin, officer@healthwatch.org, or PAT-111"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-950/80 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all font-mono"

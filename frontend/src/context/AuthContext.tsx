@@ -88,7 +88,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return { success: true };
     } catch (err: any) {
-      const detail = err.response?.data?.detail || err.response?.data?.message || 'Authentication failed. Please check your credentials.';
+      let detail = err.response?.data?.detail 
+        || err.response?.data?.message 
+        || err.response?.data?.error?.message;
+      
+      if (!detail) {
+        if (err.message && err.message.toLowerCase().includes('network')) {
+          detail = `Network Error: Unable to reach backend API (${API_BASE_URL || 'relative'}). Please check server connectivity.`;
+        } else if (err.response?.status === 502 || err.response?.status === 503 || err.response?.status === 504) {
+          detail = `Gateway Error (${err.response.status}): Backend service is currently unavailable.`;
+        } else {
+          detail = 'Authentication failed. Please check your credentials (email or username "admin").';
+        }
+      }
       return { success: false, error: detail };
     }
   };

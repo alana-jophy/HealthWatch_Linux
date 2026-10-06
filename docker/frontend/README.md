@@ -73,7 +73,7 @@ services:
     ports:
       - "80:80"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:80/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:80/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -91,8 +91,8 @@ networks:
 
 ```bash
 # Nginx Health Check Endpoint
-wget -qO- http://localhost:80/healthz
-# Response: healthy
+wget -qO- http://127.0.0.1:80/healthz
+# Response: OK
 
 # Verify Root HTML
 curl -I http://localhost:80/

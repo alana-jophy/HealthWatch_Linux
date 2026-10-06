@@ -14,6 +14,19 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val rawDomain: String = (project.findProperty("SERVER_DOMAIN") as? String)
+            ?: System.getenv("SERVER_DOMAIN")
+            ?: System.getenv("DOMAIN_NAME")
+            ?: "http://192.168.0.119:8000"
+
+        val serverUrl = when {
+            rawDomain.startsWith("http://") || rawDomain.startsWith("https://") -> rawDomain
+            System.getenv("ENABLE_HTTPS") == "true" -> "https://$rawDomain"
+            else -> "http://$rawDomain"
+        }.trimEnd('/')
+
+        buildConfigField("String", "DEFAULT_SERVER_URL", "\"$serverUrl\"")
     }
 
     signingConfigs {
@@ -44,6 +57,7 @@ android {
 
     buildFeatures {
         viewBinding = false
+        buildConfig = true
     }
 }
 

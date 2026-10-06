@@ -9,6 +9,7 @@ export interface AuthUser {
   role: 'PUBLIC_HEALTH_OFFICER' | 'ADMIN' | 'HEALTH_WORKER' | 'PATIENT';
   is_active: boolean;
   is_superuser: boolean;
+  must_change_password?: boolean;
   patient_pseudo_id?: string | null;
   patient_id?: string | null;
   created_at?: string;
@@ -21,6 +22,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
 }
 
@@ -91,6 +93,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const activeToken = token || localStorage.getItem('healthwatch_jwt_token');
+      const res = await axios.post(
+        `${API_BASE_URL}/api/auth/change-password`,
+        {
+          current_password: currentPassword,
+          new_password: newPassword,
+        },
+        {
+          headers: { Authorization: `Bearer ${activeToken}` },
+        }
+      );
+
+      if (res.data?.user) {
+        setUser(res.data.user);
+        localStorage.setItem('healthwatch_user_profile', JSON.stringify(res.data.user));
+      } else if (user) {
+        const updated = { ...user, must_change_password: false };
+        setUser(updated);
+        localStorage.setItem('healthwatch_user_profile', JSON.stringify(updated));
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      const detail = err.response?.data?.detail || err.response?.data?.message || 'Failed to update password.';
+      return { success: false, error: detail };
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('healthwatch_jwt_token');
     localStorage.removeItem('healthwatch_user_profile');
@@ -107,6 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!token && !!user,
         isLoading,
         login,
+        changePassword,
         logout,
       }}
     >

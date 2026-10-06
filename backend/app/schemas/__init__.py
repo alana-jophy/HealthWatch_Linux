@@ -7,6 +7,8 @@ from app.schemas.auth import (
     UserLoginRequest,
     UserResponse,
     TokenResponse,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
 )
 from app.schemas.patient import (
     PatientBase,

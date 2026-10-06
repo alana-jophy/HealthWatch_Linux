@@ -15,6 +15,8 @@ from app.core.security import create_access_token, get_password_hash, verify_pas
 from app.db.session import get_db
 from app.models.user import Role, User
 from app.schemas.auth import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     RoleEnum,
     TokenResponse,
     UserLoginRequest,
@@ -60,6 +62,7 @@ def register_user(
         role_id=role.id,
         is_active=True,
         is_superuser=(payload.role == RoleEnum.ADMIN),
+        must_change_password=True,
     )
     db.add(new_user)
     db.commit()
@@ -75,6 +78,7 @@ def register_user(
         is_active=new_user.is_active,
         is_superuser=new_user.is_superuser,
         created_at=new_user.created_at,
+        must_change_password=bool(new_user.must_change_password),
     )
 
 
@@ -100,6 +104,23 @@ def login_user(
         # Check if identifier matches a Patient Account ID (pseudo_id)
         linked_patient = db.query(Patient).filter(Patient.pseudo_id.ilike(identifier)).first()
         if linked_patient and linked_patient.user_id:
+            user = db.query(User).filter(User.id == linked_patient.user_id).first()
+
+    if not user:
+        # Check if identifier matches Patient contact_number (phone)
+        clean_phone = identifier.replace(" ", "").replace("-", "").replace("+91", "")
+        matching_patients = db.query(Patient).filter(
+            (Patient.contact_number == identifier) | (Patient.contact_number == clean_phone)
+        ).all()
+        for mp in matching_patients:
+            if mp.user_id:
+                candidate = db.query(User).filter(User.id == mp.user_id).first()
+                if candidate and verify_password(payload.password, candidate.hashed_password):
+                    user = candidate
+                    linked_patient = mp
+                    break
+        if not user and matching_patients and matching_patients[0].user_id:
+            linked_patient = matching_patients[0]
             user = db.query(User).filter(User.id == linked_patient.user_id).first()
     else:
         linked_patient = db.query(Patient).filter(Patient.user_id == user.id).first()
@@ -146,6 +167,7 @@ def login_user(
         is_active=user.is_active,
         is_superuser=user.is_superuser,
         created_at=user.created_at,
+        must_change_password=bool(getattr(user, "must_change_password", False)),
         patient_pseudo_id=linked_patient.pseudo_id if linked_patient else None,
         patient_id=linked_patient.id if linked_patient else None,
     )
@@ -183,8 +205,71 @@ def get_me(
         is_active=current_user.is_active,
         is_superuser=current_user.is_superuser,
         created_at=current_user.created_at,
+        must_change_password=bool(getattr(current_user, "must_change_password", False)),
         patient_pseudo_id=linked_patient.pseudo_id if linked_patient else None,
         patient_id=linked_patient.id if linked_patient else None,
+    )
+
+
+@router.post(
+    "/change-password",
+    response_model=ChangePasswordResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Change or reset user password",
+    description="Allows authenticated user to change their password (required after first login).",
+)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ChangePasswordResponse:
+    """Authenticate current password and update to new password. Resets must_change_password flag to False."""
+    from app.models.patient import Patient
+
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current temporary/registration password is incorrect.",
+        )
+
+    if payload.current_password == payload.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password cannot be the same as your current temporary password.",
+        )
+
+    if len(payload.new_password.strip()) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 6 characters.",
+        )
+
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    current_user.must_change_password = False
+    db.commit()
+    db.refresh(current_user)
+
+    logger.info(f"Password changed successfully for user: {current_user.email}")
+
+    role_name = current_user.role.name if current_user.role else "UNKNOWN"
+    linked_patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
+
+    user_resp = UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        role=role_name,
+        is_active=current_user.is_active,
+        is_superuser=current_user.is_superuser,
+        created_at=current_user.created_at,
+        must_change_password=False,
+        patient_pseudo_id=linked_patient.pseudo_id if linked_patient else None,
+        patient_id=linked_patient.id if linked_patient else None,
+    )
+
+    return ChangePasswordResponse(
+        message="Password updated successfully. You can now use your new password for all future logins.",
+        user=user_resp,
     )
 
 

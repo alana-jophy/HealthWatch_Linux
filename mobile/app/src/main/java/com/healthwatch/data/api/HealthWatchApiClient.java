@@ -7,6 +7,9 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.healthwatch.data.local.OfflineLocationQueue;
 import com.healthwatch.data.local.SessionManager;
+import com.healthwatch.data.model.AuthModels;
+import com.healthwatch.data.model.AuthModels.ChangePasswordRequest;
+import com.healthwatch.data.model.AuthModels.ChangePasswordResponse;
 import com.healthwatch.data.model.AuthModels.LoginRequest;
 import com.healthwatch.data.model.AuthModels.TokenResponse;
 import com.healthwatch.data.model.AuthModels.UserResponse;
@@ -134,7 +137,8 @@ public class HealthWatchApiClient {
                             user.getFullName(),
                             user.getRole(),
                             user.getPatientPseudoId(),
-                            user.getPatientId()
+                            user.getPatientId(),
+                            user.isMustChangePassword()
                     );
 
                     Log.d(TAG, "LOGIN_SUCCESS");
@@ -144,6 +148,45 @@ public class HealthWatchApiClient {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Login exception: " + e.getMessage());
+                postError(callback, e);
+            }
+        });
+    }
+
+    /**
+     * Change or reset account password (required on first login).
+     */
+    public void changePassword(String currentPassword, String newPassword, ApiCallback<AuthModels.ChangePasswordResponse> callback) {
+        executor.execute(() -> {
+            try {
+                AuthModels.ChangePasswordRequest req = new AuthModels.ChangePasswordRequest(currentPassword, newPassword);
+                String json = gson.toJson(req);
+                RequestBody body = RequestBody.create(json, JSON_MEDIA_TYPE);
+                Request request = new Request.Builder()
+                        .url(getBaseUrl() + "/api/auth/change-password")
+                        .post(body)
+                        .build();
+
+                Response response = client.newCall(request).execute();
+                int code = response.code();
+                String respBody = response.body() != null ? response.body().string() : "";
+
+                if (response.isSuccessful()) {
+                    AuthModels.ChangePasswordResponse changeResponse = gson.fromJson(respBody, AuthModels.ChangePasswordResponse.class);
+                    sessionManager.saveMustChangePassword(false);
+                    postSuccess(callback, changeResponse);
+                } else {
+                    String msg = "Password change failed";
+                    try {
+                        org.json.JSONObject obj = new org.json.JSONObject(respBody);
+                        if (obj.has("detail")) {
+                            msg = obj.getString("detail");
+                        }
+                    } catch (Exception ignored) {}
+                    postError(callback, new IOException(msg));
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Change password exception: " + e.getMessage());
                 postError(callback, e);
             }
         });
@@ -448,7 +491,9 @@ public class HealthWatchApiClient {
      * Returns int[]{syncedCount, failedCount}.
      */
     public int[] flushOfflineQueueSync(OfflineLocationQueue queue) {
-        List<QueuedLocationObservation> pending = queue.getPendingObservations(100);
+        String pseudoId = sessionManager.getPatientPseudoId();
+        String uuidId = sessionManager.getPatientId();
+        List<QueuedLocationObservation> pending = queue.getPendingObservationsForPatient(pseudoId, uuidId, 100);
         if (pending.isEmpty()) {
             return new int[]{0, 0};
         }

@@ -60,6 +60,9 @@ public class AuthModels {
         @SerializedName("patient_id")
         private String patientId;
 
+        @SerializedName("must_change_password")
+        private boolean mustChangePassword = false;
+
         public UserResponse() {}
 
         public String getId() {
@@ -125,6 +128,14 @@ public class AuthModels {
         public void setPatientId(String patientId) {
             this.patientId = patientId;
         }
+
+        public boolean isMustChangePassword() {
+            return mustChangePassword;
+        }
+
+        public void setMustChangePassword(boolean mustChangePassword) {
+            this.mustChangePassword = mustChangePassword;
+        }
     }
 
     public static class TokenResponse {
@@ -164,6 +175,63 @@ public class AuthModels {
 
         public void setExpiresIn(Long expiresIn) {
             this.expiresIn = expiresIn;
+        }
+
+        public UserResponse getUser() {
+            return user;
+        }
+
+        public void setUser(UserResponse user) {
+            this.user = user;
+        }
+    }
+
+    public static class ChangePasswordRequest {
+        @SerializedName("current_password")
+        private String currentPassword;
+
+        @SerializedName("new_password")
+        private String newPassword;
+
+        public ChangePasswordRequest() {}
+
+        public ChangePasswordRequest(String currentPassword, String newPassword) {
+            this.currentPassword = currentPassword;
+            this.newPassword = newPassword;
+        }
+
+        public String getCurrentPassword() {
+            return currentPassword;
+        }
+
+        public void setCurrentPassword(String currentPassword) {
+            this.currentPassword = currentPassword;
+        }
+
+        public String getNewPassword() {
+            return newPassword;
+        }
+
+        public void setNewPassword(String newPassword) {
+            this.newPassword = newPassword;
+        }
+    }
+
+    public static class ChangePasswordResponse {
+        @SerializedName("message")
+        private String message;
+
+        @SerializedName("user")
+        private UserResponse user;
+
+        public ChangePasswordResponse() {}
+
+        public String getMessage() {
+            return message;
+        }
+
+        public void setMessage(String message) {
+            this.message = message;
         }
 
         public UserResponse getUser() {

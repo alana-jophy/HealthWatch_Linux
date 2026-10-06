@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginView } from './components/auth/LoginView';
+import { FirstLoginPasswordResetModal } from './components/auth/FirstLoginPasswordResetModal';
 import { Layout } from './components/layout/Layout';
 import { GISView } from './components/gis/GISView';
 import { PatientMonitoringView } from './components/monitoring/PatientMonitoringView';
@@ -78,6 +79,11 @@ const AppContent: React.FC = () => {
   // Not logged in -> Show clean LoginView
   if (!isAuthenticated) {
     return <LoginView />;
+  }
+
+  // First-time login: Password change is required before accessing system
+  if (user?.must_change_password) {
+    return <FirstLoginPasswordResetModal />;
   }
 
   return (

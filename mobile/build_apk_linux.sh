@@ -46,10 +46,48 @@ if [ ! -d "$GRADLE_DIR" ]; then
 fi
 export PATH="$GRADLE_DIR/bin:$PATH"
 
-# 4. Build APK
+# 4. Detect Server Domain from environment or .env file
+REPO_ROOT="/home/alana/Desktop/healthwatch"
+TARGET_DOMAIN="${SERVER_DOMAIN:-}"
+
+if [ -z "$TARGET_DOMAIN" ]; then
+    ENV_FILE=""
+    if [ -f "$REPO_ROOT/.env.production" ]; then
+        ENV_FILE="$REPO_ROOT/.env.production"
+    elif [ -f "$REPO_ROOT/.env" ]; then
+        ENV_FILE="$REPO_ROOT/.env"
+    fi
+
+    if [ -n "$ENV_FILE" ]; then
+        echo "[INFO] Reading server domain configuration from $ENV_FILE..."
+        FILE_DOMAIN=$(grep -E '^(SERVER_DOMAIN|DOMAIN_NAME)=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
+        FILE_HTTPS=$(grep -E '^ENABLE_HTTPS=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
+        if [ -n "$FILE_DOMAIN" ]; then
+            if [[ ! "$FILE_DOMAIN" =~ ^https?:// ]]; then
+                if [ "$FILE_HTTPS" = "true" ]; then
+                    TARGET_DOMAIN="https://$FILE_DOMAIN"
+                else
+                    TARGET_DOMAIN="http://$FILE_DOMAIN"
+                fi
+            else
+                TARGET_DOMAIN="$FILE_DOMAIN"
+            fi
+        fi
+    fi
+fi
+
+GRADLE_DOMAIN_PROP=""
+if [ -n "$TARGET_DOMAIN" ]; then
+    echo "[INFO] Injected Server Domain into APK: $TARGET_DOMAIN"
+    GRADLE_DOMAIN_PROP="-PSERVER_DOMAIN=$TARGET_DOMAIN"
+else
+    echo "[INFO] No SERVER_DOMAIN or DOMAIN_NAME detected; using default fallback."
+fi
+
+# 5. Build APK
 echo "[INFO] Building HealthWatch Android APK..."
 cd "/home/alana/Desktop/healthwatch/mobile"
-gradle assembleDebug --no-daemon
+gradle assembleDebug $GRADLE_DOMAIN_PROP --no-daemon
 
 # 5. Copy output APK to frontend/public for phone download
 APK_SRC="/home/alana/Desktop/healthwatch/mobile/app/build/outputs/apk/debug/app-debug.apk"

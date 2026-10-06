@@ -36,10 +36,23 @@ class UserResponse(BaseModel):
     is_active: bool
     is_superuser: bool
     created_at: datetime
+    must_change_password: bool = False
     patient_pseudo_id: Optional[str] = None
     patient_id: Optional[uuid.UUID] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Schema for changing/resetting user password."""
+    current_password: str = Field(..., min_length=1, description="Current temporary or existing password")
+    new_password: str = Field(..., min_length=6, max_length=100, description="New password (min 6 characters)")
+
+
+class ChangePasswordResponse(BaseModel):
+    """Response after password update."""
+    message: str
+    user: UserResponse
 
 
 class TokenResponse(BaseModel):

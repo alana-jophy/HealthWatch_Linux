@@ -36,9 +36,17 @@ import {
  * 3. Defaults to http://localhost:8000 for standard local development.
  */
 export const getApiBaseUrl = (): string => {
-  if (import.meta.env.VITE_API_BASE_URL) {
+  if (typeof import.meta.env.VITE_API_BASE_URL !== 'undefined' && import.meta.env.VITE_API_BASE_URL !== '') {
     return import.meta.env.VITE_API_BASE_URL;
   }
+  // In production behind reverse proxy (standard HTTP 80 or HTTPS 443 with no custom port), use relative path
+  if (
+    typeof window !== 'undefined' &&
+    (!window.location.port || window.location.port === '80' || window.location.port === '443')
+  ) {
+    return '';
+  }
+  // In local network development over custom port (e.g. :5173), direct API to port 8000
   if (
     typeof window !== 'undefined' &&
     window.location.hostname &&
@@ -636,6 +644,7 @@ export const createPatientRecord = async (
     date_of_birth?: string | null;
     tracking_interval_minutes?: number;
     tracking_days?: string;
+    monitoring_days?: number;
     disease_id?: string;
     disease_name?: string;
     address: string;
@@ -672,6 +681,7 @@ export const updatePatientRecord = async (
     date_of_birth: string | null;
     tracking_interval_minutes: number;
     tracking_days: string;
+    monitoring_days: number;
     disease_id: string | null;
     disease_name: string | null;
     address: string;
@@ -691,6 +701,27 @@ export const updatePatientRecord = async (
   const res = await apiClient.put<PatientProfile>(`/api/v1/patients/${patientId}`, payload, {
     headers: { Authorization: auth },
   });
+  return res.data;
+};
+
+/**
+ * Change or reset authenticated user password
+ */
+export const changePasswordApi = async (
+  currentPassword: string,
+  newPassword: string
+): Promise<{ message: string; user: any }> => {
+  const token = localStorage.getItem('healthwatch_jwt_token');
+  const res = await apiClient.post(
+    '/api/auth/change-password',
+    {
+      current_password: currentPassword,
+      new_password: newPassword,
+    },
+    {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }
+  );
   return res.data;
 };
 
@@ -737,6 +768,41 @@ export const fetchSystemUsers = async (): Promise<UserItem[]> => {
   });
   return res.data;
 };
+
+/**
+ * Step 24: Create a new System User account (Admin only)
+ * Automatically sets must_change_password = True
+ */
+export const createSystemUser = async (payload: {
+  email: string;
+  full_name: string;
+  role: string;
+  password: string;
+}): Promise<any> => {
+  const auth = await getOfficerAuthHeader();
+  const res = await apiClient.post('/api/v1/users/', payload, {
+    headers: { Authorization: auth },
+  });
+  return res.data;
+};
+
+/**
+ * Step 25: Reset a user's password to a temporary password (Admin only)
+ * Sets must_change_password = True
+ */
+export const resetUserPasswordByAdmin = async (
+  userId: string,
+  temporaryPassword: string
+): Promise<any> => {
+  const auth = await getOfficerAuthHeader();
+  const res = await apiClient.post(
+    `/api/v1/users/${userId}/reset-password`,
+    { temporary_password: temporaryPassword },
+    { headers: { Authorization: auth } }
+  );
+  return res.data;
+};
+
 
 
 

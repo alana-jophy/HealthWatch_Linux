@@ -88,6 +88,7 @@ def build_patient_response(patient: Patient, db: Session) -> PatientResponse:
         date_of_birth=patient.date_of_birth,
         tracking_interval_minutes=patient.tracking_interval_minutes or 15,
         tracking_days=patient.tracking_days or "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday",
+        monitoring_days=patient.monitoring_days or 14,
         disease_id=disease_id,
         disease_name=disease_name,
         address=patient.address,
@@ -219,6 +220,7 @@ def create_patient(
             role_id=role_patient.id,
             is_active=payload.is_active,
             is_superuser=False,
+            must_change_password=True,
         )
         db.add(new_user)
         db.flush()
@@ -256,6 +258,7 @@ def create_patient(
         )
 
     tracking_days = payload.tracking_days or "Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday"
+    monitoring_days = payload.monitoring_days or 14
 
     patient = Patient(
         pseudo_id=payload.pseudo_id,
@@ -269,6 +272,7 @@ def create_patient(
         date_of_birth=payload.date_of_birth,
         tracking_interval_minutes=tracking_interval_minutes,
         tracking_days=tracking_days,
+        monitoring_days=monitoring_days,
         disease_id=disease_id,
         disease_name=disease_name,
         address=payload.address,
@@ -633,6 +637,11 @@ def update_patient(
             ).all()
             for s in active_sessions:
                 s.tracking_days = new_days
+
+    if "monitoring_days" in update_data:
+        new_mon = update_data.pop("monitoring_days")
+        if new_mon and int(new_mon) >= 1:
+            patient.monitoring_days = int(new_mon)
 
     for field, value in update_data.items():
         setattr(patient, field, value)

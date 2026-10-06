@@ -14,13 +14,16 @@ public class SessionManager {
     private static final String KEY_PATIENT_PSEUDO_ID = "patient_pseudo_id";
     private static final String KEY_ACTIVE_SESSION_ID = "active_session_id";
     private static final String KEY_BASE_URL = "base_url";
+    private static final String KEY_MUST_CHANGE_PASSWORD = "must_change_password";
 
-    public static final String DEFAULT_BASE_URL = "http://192.168.0.119:8000";
+    public static final String DEFAULT_BASE_URL = com.healthwatch.BuildConfig.DEFAULT_SERVER_URL;
 
+    private final Context context;
     private final SharedPreferences prefs;
 
     public SessionManager(Context context) {
-        this.prefs = context.getApplicationContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+        this.context = context.getApplicationContext();
+        this.prefs = this.context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
     }
 
     public void saveAuthToken(String token) {
@@ -32,6 +35,10 @@ public class SessionManager {
     }
 
     public void saveUser(String email, String fullName, String role, String patientPseudoId, String patientId) {
+        saveUser(email, fullName, role, patientPseudoId, patientId, false);
+    }
+
+    public void saveUser(String email, String fullName, String role, String patientPseudoId, String patientId, boolean mustChangePassword) {
         if (email == null || email.trim().isEmpty()) {
             throw new IllegalArgumentException("User email cannot be null or empty.");
         }
@@ -39,7 +46,8 @@ public class SessionManager {
         SharedPreferences.Editor editor = prefs.edit()
                 .putString(KEY_USER_EMAIL, email.trim())
                 .putString(KEY_USER_NAME, fullName != null ? fullName.trim() : "")
-                .putString(KEY_USER_ROLE, role != null ? role.trim() : "");
+                .putString(KEY_USER_ROLE, role != null ? role.trim() : "")
+                .putBoolean(KEY_MUST_CHANGE_PASSWORD, mustChangePassword);
 
         if (patientPseudoId != null && !patientPseudoId.trim().isEmpty()) {
             editor.putString(KEY_PATIENT_PSEUDO_ID, patientPseudoId.trim());
@@ -54,6 +62,20 @@ public class SessionManager {
         }
 
         editor.apply();
+
+        if ((patientPseudoId != null && !patientPseudoId.trim().isEmpty()) || (patientId != null && !patientId.trim().isEmpty())) {
+            try {
+                new OfflineLocationQueue(context).purgeOtherPatients(patientPseudoId, patientId);
+            } catch (Exception ignored) {}
+        }
+    }
+
+    public void saveMustChangePassword(boolean mustChange) {
+        prefs.edit().putBoolean(KEY_MUST_CHANGE_PASSWORD, mustChange).apply();
+    }
+
+    public boolean mustChangePassword() {
+        return prefs.getBoolean(KEY_MUST_CHANGE_PASSWORD, false);
     }
 
     public String getUserEmail() {
@@ -101,7 +123,14 @@ public class SessionManager {
 
     public void saveBaseUrl(String url) {
         if (url != null && !url.trim().isEmpty()) {
-            prefs.edit().putString(KEY_BASE_URL, url.trim()).apply();
+            String cleanUrl = url.trim();
+            if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+                cleanUrl = "http://" + cleanUrl;
+            }
+            while (cleanUrl.endsWith("/")) {
+                cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);
+            }
+            prefs.edit().putString(KEY_BASE_URL, cleanUrl).apply();
         }
     }
 
@@ -118,5 +147,8 @@ public class SessionManager {
         String currentBaseUrl = getBaseUrl();
         prefs.edit().clear().apply();
         saveBaseUrl(currentBaseUrl);
+        try {
+            new OfflineLocationQueue(context).clearAllObservations();
+        } catch (Exception ignored) {}
     }
 }

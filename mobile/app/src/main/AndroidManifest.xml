@@ -37,6 +37,11 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".ui.ResetPasswordActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ui.DashboardActivity"
             android:exported="false" />
 

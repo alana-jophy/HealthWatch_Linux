@@ -43,6 +43,9 @@ public class PatientModels {
         @SerializedName("is_active")
         private boolean isActive;
 
+        @SerializedName("monitoring_days")
+        private Integer monitoringDays;
+
         public PatientProfile() {}
 
         public String getId() { return id; }
@@ -80,6 +83,9 @@ public class PatientModels {
 
         public boolean isActive() { return isActive; }
         public void setActive(boolean active) { isActive = active; }
+
+        public Integer getMonitoringDays() { return monitoringDays != null ? monitoringDays : 14; }
+        public void setMonitoringDays(Integer monitoringDays) { this.monitoringDays = monitoringDays; }
     }
 
     public static class DiseaseCase {

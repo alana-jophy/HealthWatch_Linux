@@ -135,6 +135,213 @@ public class OfflineLocationQueue extends SQLiteOpenHelper {
         db.execSQL("UPDATE " + TABLE_NAME + " SET " + COL_RETRY_COUNT + " = " + COL_RETRY_COUNT + " + 1 WHERE " + COL_LOCAL_ID + " = " + localId);
     }
 
+    public List<QueuedLocationObservation> getAllObservationsForPatient(String pseudoId, String uuidId, int limit) {
+        List<QueuedLocationObservation> list = new ArrayList<>();
+        if ((pseudoId == null || pseudoId.trim().isEmpty()) && (uuidId == null || uuidId.trim().isEmpty())) {
+            return list;
+        }
+
+        List<String> argsList = new ArrayList<>();
+        StringBuilder selection = new StringBuilder();
+        if (pseudoId != null && !pseudoId.trim().isEmpty()) {
+            selection.append(COL_PATIENT_ID).append(" = ?");
+            argsList.add(pseudoId.trim());
+        }
+        if (uuidId != null && !uuidId.trim().isEmpty()) {
+            if (selection.length() > 0) {
+                selection.append(" OR ");
+            }
+            selection.append(COL_PATIENT_ID).append(" = ?");
+            argsList.add(uuidId.trim());
+        }
+
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor cursor = db.query(
+                TABLE_NAME,
+                null,
+                selection.toString(),
+                argsList.toArray(new String[0]),
+                null,
+                null,
+                COL_CREATED_AT + " DESC",
+                String.valueOf(limit)
+        );
+
+        if (cursor != null) {
+            try {
+                int colLocalId = cursor.getColumnIndexOrThrow(COL_LOCAL_ID);
+                int colPatientId = cursor.getColumnIndexOrThrow(COL_PATIENT_ID);
+                int colSessionId = cursor.getColumnIndexOrThrow(COL_SESSION_ID);
+                int colLat = cursor.getColumnIndexOrThrow(COL_LATITUDE);
+                int colLng = cursor.getColumnIndexOrThrow(COL_LONGITUDE);
+                int colAcc = cursor.getColumnIndexOrThrow(COL_ACCURACY);
+                int colRec = cursor.getColumnIndexOrThrow(COL_RECORDED_AT);
+                int colSrc = cursor.getColumnIndexOrThrow(COL_SOURCE);
+                int colSync = cursor.getColumnIndexOrThrow(COL_SYNC_STATUS);
+                int colRetry = cursor.getColumnIndexOrThrow(COL_RETRY_COUNT);
+                int colCreated = cursor.getColumnIndexOrThrow(COL_CREATED_AT);
+
+                while (cursor.moveToNext()) {
+                    Float acc = cursor.isNull(colAcc) ? null : cursor.getFloat(colAcc);
+                    QueuedLocationObservation obs = new QueuedLocationObservation(
+                            cursor.getLong(colLocalId),
+                            cursor.getString(colPatientId),
+                            cursor.getString(colSessionId),
+                            cursor.getDouble(colLat),
+                            cursor.getDouble(colLng),
+                            acc,
+                            cursor.getString(colRec),
+                            cursor.getString(colSrc),
+                            cursor.getString(colSync),
+                            cursor.getInt(colRetry),
+                            cursor.getLong(colCreated)
+                    );
+                    list.add(obs);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+        return list;
+    }
+
+    public List<QueuedLocationObservation> getPendingObservationsForPatient(String pseudoId, String uuidId, int limit) {
+        List<QueuedLocationObservation> list = new ArrayList<>();
+        if ((pseudoId == null || pseudoId.trim().isEmpty()) && (uuidId == null || uuidId.trim().isEmpty())) {
+            return list;
+        }
+
+        List<String> argsList = new ArrayList<>();
+        argsList.add("PENDING");
+        StringBuilder patientWhere = new StringBuilder();
+        if (pseudoId != null && !pseudoId.trim().isEmpty()) {
+            patientWhere.append(COL_PATIENT_ID).append(" = ?");
+            argsList.add(pseudoId.trim());
+        }
+        if (uuidId != null && !uuidId.trim().isEmpty()) {
+            if (patientWhere.length() > 0) {
+                patientWhere.append(" OR ");
+            }
+            patientWhere.append(COL_PATIENT_ID).append(" = ?");
+            argsList.add(uuidId.trim());
+        }
+
+        String selection = COL_SYNC_STATUS + " = ? AND (" + patientWhere.toString() + ")";
+
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor cursor = db.query(
+                TABLE_NAME,
+                null,
+                selection,
+                argsList.toArray(new String[0]),
+                null,
+                null,
+                COL_CREATED_AT + " ASC",
+                String.valueOf(limit)
+        );
+
+        if (cursor != null) {
+            try {
+                int colLocalId = cursor.getColumnIndexOrThrow(COL_LOCAL_ID);
+                int colPatientId = cursor.getColumnIndexOrThrow(COL_PATIENT_ID);
+                int colSessionId = cursor.getColumnIndexOrThrow(COL_SESSION_ID);
+                int colLat = cursor.getColumnIndexOrThrow(COL_LATITUDE);
+                int colLng = cursor.getColumnIndexOrThrow(COL_LONGITUDE);
+                int colAcc = cursor.getColumnIndexOrThrow(COL_ACCURACY);
+                int colRec = cursor.getColumnIndexOrThrow(COL_RECORDED_AT);
+                int colSrc = cursor.getColumnIndexOrThrow(COL_SOURCE);
+                int colSync = cursor.getColumnIndexOrThrow(COL_SYNC_STATUS);
+                int colRetry = cursor.getColumnIndexOrThrow(COL_RETRY_COUNT);
+                int colCreated = cursor.getColumnIndexOrThrow(COL_CREATED_AT);
+
+                while (cursor.moveToNext()) {
+                    Float acc = cursor.isNull(colAcc) ? null : cursor.getFloat(colAcc);
+                    QueuedLocationObservation obs = new QueuedLocationObservation(
+                            cursor.getLong(colLocalId),
+                            cursor.getString(colPatientId),
+                            cursor.getString(colSessionId),
+                            cursor.getDouble(colLat),
+                            cursor.getDouble(colLng),
+                            acc,
+                            cursor.getString(colRec),
+                            cursor.getString(colSrc),
+                            cursor.getString(colSync),
+                            cursor.getInt(colRetry),
+                            cursor.getLong(colCreated)
+                    );
+                    list.add(obs);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+        return list;
+    }
+
+    public int getPendingCountForPatient(String pseudoId, String uuidId) {
+        if ((pseudoId == null || pseudoId.trim().isEmpty()) && (uuidId == null || uuidId.trim().isEmpty())) {
+            return 0;
+        }
+
+        List<String> argsList = new ArrayList<>();
+        argsList.add("PENDING");
+        StringBuilder patientWhere = new StringBuilder();
+        if (pseudoId != null && !pseudoId.trim().isEmpty()) {
+            patientWhere.append(COL_PATIENT_ID).append(" = ?");
+            argsList.add(pseudoId.trim());
+        }
+        if (uuidId != null && !uuidId.trim().isEmpty()) {
+            if (patientWhere.length() > 0) {
+                patientWhere.append(" OR ");
+            }
+            patientWhere.append(COL_PATIENT_ID).append(" = ?");
+            argsList.add(uuidId.trim());
+        }
+
+        String sql = "SELECT COUNT(*) FROM " + TABLE_NAME + " WHERE " + COL_SYNC_STATUS + " = ? AND (" + patientWhere.toString() + ")";
+
+        SQLiteDatabase db = getReadableDatabase();
+        Cursor cursor = db.rawQuery(sql, argsList.toArray(new String[0]));
+        if (cursor != null) {
+            try {
+                if (cursor.moveToFirst()) {
+                    return cursor.getInt(0);
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+        return 0;
+    }
+
+    public void purgeOtherPatients(String pseudoId, String uuidId) {
+        SQLiteDatabase db = getWritableDatabase();
+        if ((pseudoId == null || pseudoId.trim().isEmpty()) && (uuidId == null || uuidId.trim().isEmpty())) {
+            db.delete(TABLE_NAME, null, null);
+            return;
+        }
+
+        List<String> argsList = new ArrayList<>();
+        StringBuilder where = new StringBuilder();
+        if (pseudoId != null && !pseudoId.trim().isEmpty()) {
+            where.append(COL_PATIENT_ID).append(" != ?");
+            argsList.add(pseudoId.trim());
+        }
+        if (uuidId != null && !uuidId.trim().isEmpty()) {
+            if (where.length() > 0) {
+                where.append(" AND ");
+            }
+            where.append(COL_PATIENT_ID).append(" != ?");
+            argsList.add(uuidId.trim());
+        }
+        db.delete(TABLE_NAME, where.toString(), argsList.toArray(new String[0]));
+    }
+
+    public void clearAllObservations() {
+        SQLiteDatabase db = getWritableDatabase();
+        db.delete(TABLE_NAME, null, null);
+    }
+
     public List<QueuedLocationObservation> getAllObservations(int limit) {
         List<QueuedLocationObservation> list = new ArrayList<>();
         SQLiteDatabase db = getReadableDatabase();

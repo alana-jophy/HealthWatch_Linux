@@ -487,6 +487,8 @@ def sync_schema_columns(conn) -> None:
         "ALTER TABLE monitoring_sessions ADD COLUMN IF NOT EXISTS tracking_days VARCHAR(250);",
         # Patient assigned health worker column
         "ALTER TABLE patients ADD COLUMN IF NOT EXISTS assigned_worker_id UUID REFERENCES users(id) ON DELETE SET NULL;",
+        "ALTER TABLE patients ADD COLUMN IF NOT EXISTS monitoring_days INTEGER DEFAULT 14;",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;",
 
         # Exposure Events columns (Step 16)
         "ALTER TABLE exposure_events ADD COLUMN IF NOT EXISTS patient_a_id UUID REFERENCES patients(id) ON DELETE CASCADE;",

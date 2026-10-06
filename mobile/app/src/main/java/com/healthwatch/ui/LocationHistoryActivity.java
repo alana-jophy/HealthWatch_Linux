@@ -94,6 +94,25 @@ public class LocationHistoryActivity extends AppCompatActivity {
         syncButton.setBackgroundColor(Color.parseColor("#0284C7"));
         syncButton.setOnClickListener(v -> syncOfflineQueue());
         controlCard.addView(syncButton);
+
+        Button clearButton = new Button(this);
+        clearButton.setText("CLEAR LOCAL CACHE");
+        clearButton.setTextSize(12f);
+        clearButton.setTextColor(Color.parseColor("#FDA4AF"));
+        clearButton.setBackgroundColor(Color.parseColor("#334155"));
+        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        clearParams.setMargins(0, 10, 0, 0);
+        clearButton.setLayoutParams(clearParams);
+        clearButton.setOnClickListener(v -> {
+            offlineQueue.clearAllObservations();
+            Toast.makeText(this, "Local offline location queue cleared.", Toast.LENGTH_SHORT).show();
+            loadLocationHistory();
+        });
+        controlCard.addView(clearButton);
+
         container.addView(controlCard);
 
         progressBar = new ProgressBar(this);
@@ -118,18 +137,26 @@ public class LocationHistoryActivity extends AppCompatActivity {
     }
 
     private void loadLocationHistory() {
-        List<QueuedLocationObservation> observations = offlineQueue.getAllObservations(100);
-        int pendingCount = offlineQueue.getPendingCount();
+        String pseudoId = sessionManager.getPatientPseudoId();
+        String uuidId = sessionManager.getPatientId();
 
-        summaryText.setText("Stored: " + observations.size() + " observations (" + pendingCount + " pending server upload)");
+        // Enforce strict device isolation: purge any orphan/prior patient records on this phone
+        offlineQueue.purgeOtherPatients(pseudoId, uuidId);
+
+        List<QueuedLocationObservation> observations = offlineQueue.getAllObservationsForPatient(pseudoId, uuidId, 100);
+        int pendingCount = offlineQueue.getPendingCountForPatient(pseudoId, uuidId);
+
+        String idLabel = (pseudoId != null && !pseudoId.trim().isEmpty()) ? pseudoId : "Current Patient";
+        summaryText.setText("Patient: " + idLabel + "\nStored: " + observations.size() + " observations (" + pendingCount + " pending server upload)");
 
         listContainer.removeAllViews();
 
         if (observations.isEmpty()) {
             TextView emptyView = new TextView(this);
-            emptyView.setText("No location observations collected yet. Start an active monitoring session to begin periodic ~15-minute telemetry.");
+            emptyView.setText("No location observations collected yet for patient (" + idLabel + ").\n\nStart an active monitoring session to begin periodic ~15-minute telemetry.");
             emptyView.setTextSize(13f);
             emptyView.setTextColor(Color.parseColor("#94A3B8"));
+            emptyView.setLineSpacing(4f, 1.2f);
             emptyView.setPadding(0, 16, 0, 0);
             listContainer.addView(emptyView);
             return;
@@ -178,6 +205,14 @@ public class LocationHistoryActivity extends AppCompatActivity {
     }
 
     private void syncOfflineQueue() {
+        String pseudoId = sessionManager.getPatientPseudoId();
+        String uuidId = sessionManager.getPatientId();
+        int pending = offlineQueue.getPendingCountForPatient(pseudoId, uuidId);
+        if (pending == 0) {
+            Toast.makeText(this, "No pending offline observations to sync for this patient profile.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         progressBar.setVisibility(View.VISIBLE);
         syncButton.setEnabled(false);
 

@@ -15,6 +15,7 @@ class PatientBase(BaseModel):
     date_of_birth: Optional[datetime] = Field(None, description="Patient date of birth")
     tracking_interval_minutes: int = Field(default=15, description="Officer-configured GPS tracking interval in minutes (1, 5, 10, 15)")
     tracking_days: str = Field(default="Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday", description="Comma-separated authorized tracking days of week")
+    monitoring_days: int = Field(default=14, ge=1, le=180, description="Authorized surveillance/quarantine monitoring window in days")
     disease_id: Optional[uuid.UUID] = Field(None, description="Referenced Disease ID from catalog")
     disease_name: Optional[str] = Field(None, description="Catalog disease name")
     address: Optional[str] = Field(None, description="Residential address description")
@@ -66,6 +67,7 @@ class PatientUpdate(BaseModel):
     date_of_birth: Optional[datetime] = None
     tracking_interval_minutes: Optional[int] = None
     tracking_days: Optional[str] = None
+    monitoring_days: Optional[int] = Field(None, ge=1, le=180, description="Updated surveillance monitoring window in days")
     disease_id: Optional[uuid.UUID] = None
     disease_name: Optional[str] = None
     address: Optional[str] = None

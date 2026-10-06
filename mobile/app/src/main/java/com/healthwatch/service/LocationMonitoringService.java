@@ -188,7 +188,11 @@ public class LocationMonitoringService extends Service {
     private void processLocationObservation(double latitude, double longitude, Float accuracy) {
         String patientId = sessionManager.getPatientId();
         if (patientId == null || patientId.trim().isEmpty()) {
-            patientId = "UNKNOWN_PATIENT";
+            patientId = sessionManager.getPatientPseudoId();
+        }
+        if (patientId == null || patientId.trim().isEmpty()) {
+            Log.w(TAG, "Cannot process location: No authenticated patient identifier found.");
+            return;
         }
         String sessionId = sessionManager.getActiveSessionId();
         if (sessionId == null || sessionId.trim().isEmpty()) {

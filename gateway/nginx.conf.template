@@ -1,0 +1,67 @@
+# ==============================================================================
+# HealthWatch HTTP Gateway Configuration (No SSL / Pre-SSL Mode)
+# ==============================================================================
+
+upstream frontend_upstream {
+    server frontend:80;
+}
+
+upstream backend_upstream {
+    server backend:8000;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${DOMAIN_NAME} localhost 127.0.0.1 _;
+
+    client_max_body_size 64M;
+
+    # Let's Encrypt ACME Challenge Directory
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        try_files $uri =404;
+    }
+
+    # API Endpoints -> Backend Microservice
+    location /api/ {
+        proxy_pass http://backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 120s;
+    }
+
+    # Swagger / OpenAPI Documentation
+    location ~* ^/(docs|redoc|openapi\.json) {
+        proxy_pass http://backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Native Android APK Downloads
+    location ~* ^/(download|HealthWatch\.apk) {
+        proxy_pass http://backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Frontend Single Page Application
+    location / {
+        proxy_pass http://frontend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

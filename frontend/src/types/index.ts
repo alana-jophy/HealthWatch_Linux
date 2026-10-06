@@ -205,6 +205,7 @@ export interface PatientProfile {
   date_of_birth?: string | null;
   tracking_interval_minutes?: number;
   tracking_days?: string;
+  monitoring_days?: number;
   disease_id?: string | null;
   disease_name?: string | null;
   address: string;
@@ -563,5 +564,6 @@ export interface UserItem {
   role_name: string;
   is_active: boolean;
   is_superuser: boolean;
+  must_change_password?: boolean;
   created_at?: string;
 }

@@ -43,12 +43,23 @@ public class DashboardActivity extends AppCompatActivity {
             return;
         }
 
+        if (sessionManager.mustChangePassword()) {
+            startActivity(new Intent(this, ResetPasswordActivity.class));
+            finish();
+            return;
+        }
+
         buildUi();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        if (sessionManager.mustChangePassword()) {
+            startActivity(new Intent(this, ResetPasswordActivity.class));
+            finish();
+            return;
+        }
         refreshDashboardData();
     }
 
@@ -156,6 +167,10 @@ public class DashboardActivity extends AppCompatActivity {
         container.addView(createModuleButton("6. Movement Roadmap", "Sequential spatial observation roadmap",
                 () -> startActivity(new Intent(this, RoadmapActivity.class))));
 
+        // 7. Security & Password Button
+        container.addView(createModuleButton("7. Security & Password", "Change or update your account password",
+                () -> startActivity(new Intent(this, ResetPasswordActivity.class))));
+
         // Logout Button
         Button logoutButton = new Button(this);
         logoutButton.setText("LOG OUT");
@@ -163,6 +178,7 @@ public class DashboardActivity extends AppCompatActivity {
         logoutButton.setTextColor(Color.parseColor("#FDA4AF"));
         logoutButton.setBackgroundColor(Color.TRANSPARENT);
         logoutButton.setOnClickListener(v -> {
+            offlineQueue.clearAllObservations();
             sessionManager.clearSession();
             startActivity(new Intent(DashboardActivity.this, LoginActivity.class));
             finish();
@@ -205,10 +221,13 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void refreshDashboardData() {
-        int pendingCount = offlineQueue.getPendingCount();
+        String currentPseudo = sessionManager.getPatientPseudoId();
+        String currentPatientId = sessionManager.getPatientId();
+        offlineQueue.purgeOtherPatients(currentPseudo, currentPatientId);
+
+        int pendingCount = offlineQueue.getPendingCountForPatient(currentPseudo, currentPatientId);
         queueStatusText.setText("Offline Queue: " + pendingCount + " observations pending upload");
 
-        String currentPseudo = sessionManager.getPatientPseudoId();
         if (currentPseudo != null && !currentPseudo.isEmpty()) {
             patientPseudoText.setText("ID: " + currentPseudo);
         }

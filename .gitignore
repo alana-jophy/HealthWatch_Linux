@@ -2,11 +2,14 @@
 # HealthWatch .gitignore
 # ==============================================================================
 
-# Environment files
+# Environment & Secret Files
 .env
-.env.local
-.env.*.local
+.env.*
 *.env
+!.env.example
+!.env.*.example
+!docker/env.*.sample
+!docker/env.sample
 
 # Operating System Files
 .DS_Store
@@ -18,6 +21,7 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+*~
 *.sublime-workspace
 *.sublime-project
 
@@ -61,12 +65,24 @@ pnpm-debug.log*
 lerna-debug.log*
 frontend/dist/
 frontend/dist-ssr/
-*.local
+.eslintcache
 
 # Database & Volume Mounts
 postgres_data/
 *.sqlite3
 *.db
+*.sqlite
+
+# SSL Certificates & Secrets
+*.pem
+*.key
+*.crt
+*.csr
+*.cert
+*.pfx
+*.p12
+certbot/
+letsencrypt/
 
 # Mobile (Android / Kotlin)
 mobile/.gradle/
@@ -78,6 +94,8 @@ mobile/.idea/
 mobile/captures/
 mobile/.externalNativeBuild
 mobile/.cxx/
+*.keystore
+*.jks
 
 # AI / ML Model Artifacts & Data
 ai/models/*.pkl
@@ -86,9 +104,8 @@ ai/models/*.onnx
 ai/data/
 ai/notebooks/.ipynb_checkpoints/
 
-# Docker Logs
+# Docker Logs & Overrides
 *.log
 docker-compose.override.yml
 powershell.cmd
 platform-tools/
-

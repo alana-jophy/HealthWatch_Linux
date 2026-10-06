@@ -41,6 +41,7 @@ class Patient(Base):
     # GPS Monitoring Configuration (Officer-controlled)
     tracking_interval_minutes = Column(Integer, default=15, nullable=False)
     tracking_days = Column(String(250), default="Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday", nullable=False)
+    monitoring_days = Column(Integer, default=14, nullable=False)
 
     # Primary Disease classification
     disease_id = Column(UUID(as_uuid=True), ForeignKey("diseases.id", ondelete="SET NULL"), nullable=True)

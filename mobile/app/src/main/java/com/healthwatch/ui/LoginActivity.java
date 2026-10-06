@@ -14,6 +14,7 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import com.healthwatch.data.api.HealthWatchApiClient;
 import com.healthwatch.data.local.SessionManager;
@@ -41,9 +42,13 @@ public class LoginActivity extends AppCompatActivity {
         sessionManager = new SessionManager(this);
         apiClient = new HealthWatchApiClient(sessionManager);
 
-        // If already authenticated, directly navigate to Dashboard
+        // If already authenticated, directly navigate to Dashboard or ResetPassword
         if (sessionManager.isLoggedIn()) {
-            startActivity(new Intent(this, DashboardActivity.class));
+            if (sessionManager.mustChangePassword()) {
+                startActivity(new Intent(this, ResetPasswordActivity.class));
+            } else {
+                startActivity(new Intent(this, DashboardActivity.class));
+            }
             finish();
             return;
         }
@@ -79,15 +84,15 @@ public class LoginActivity extends AppCompatActivity {
         container.addView(titleText);
         container.addView(subtitleText);
 
-        // Email input
+        // Email / Patient ID / Phone input
         TextView emailLabel = new TextView(this);
-        emailLabel.setText("Registered Email Address:");
+        emailLabel.setText("Registered Email, Patient ID, or Phone:");
         emailLabel.setTextSize(13f);
         emailLabel.setTextColor(Color.parseColor("#CBD5E1"));
         emailLabel.setPadding(0, 0, 0, 8);
 
         emailInput = new EditText(this);
-        emailInput.setHint("patient@healthwatch.org");
+        emailInput.setHint("e.g. PAT-..., email, or 10-digit phone");
         emailInput.setTextColor(Color.WHITE);
         emailInput.setHintTextColor(Color.parseColor("#64748B"));
         emailInput.setBackgroundColor(Color.parseColor("#1E293B"));
@@ -102,24 +107,62 @@ public class LoginActivity extends AppCompatActivity {
         spacer1.setLayoutParams(new LinearLayout.LayoutParams(1, 32));
         container.addView(spacer1);
 
-        // Password input
+        // Password input with Eye Toggle Button
         TextView passwordLabel = new TextView(this);
         passwordLabel.setText("Password:");
         passwordLabel.setTextSize(13f);
         passwordLabel.setTextColor(Color.parseColor("#CBD5E1"));
         passwordLabel.setPadding(0, 0, 0, 8);
 
+        LinearLayout passwordContainer = new LinearLayout(this);
+        passwordContainer.setOrientation(LinearLayout.HORIZONTAL);
+        passwordContainer.setBackgroundColor(Color.parseColor("#1E293B"));
+        passwordContainer.setGravity(Gravity.CENTER_VERTICAL);
+        passwordContainer.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
         passwordInput = new EditText(this);
         passwordInput.setHint("Enter account password");
         passwordInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
         passwordInput.setTextColor(Color.WHITE);
         passwordInput.setHintTextColor(Color.parseColor("#64748B"));
-        passwordInput.setBackgroundColor(Color.parseColor("#1E293B"));
-        passwordInput.setPadding(28, 28, 28, 28);
+        passwordInput.setBackgroundColor(Color.TRANSPARENT);
+        passwordInput.setPadding(28, 28, 12, 28);
         passwordInput.setTextSize(15f);
+        LinearLayout.LayoutParams passParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+        passwordInput.setLayoutParams(passParams);
+
+        TextView eyeToggleButton = new TextView(this);
+        eyeToggleButton.setText("👁");
+        eyeToggleButton.setTextSize(18f);
+        eyeToggleButton.setPadding(20, 20, 28, 20);
+        eyeToggleButton.setTextColor(Color.parseColor("#94A3B8"));
+        eyeToggleButton.setGravity(Gravity.CENTER);
+        eyeToggleButton.setContentDescription("Show or hide password");
+
+        final boolean[] isPasswordVisible = {false};
+        eyeToggleButton.setOnClickListener(v -> {
+            if (isPasswordVisible[0]) {
+                passwordInput.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
+                eyeToggleButton.setText("👁");
+                eyeToggleButton.setTextColor(Color.parseColor("#94A3B8"));
+                isPasswordVisible[0] = false;
+            } else {
+                passwordInput.setTransformationMethod(android.text.method.HideReturnsTransformationMethod.getInstance());
+                eyeToggleButton.setText("👁‍🗨");
+                eyeToggleButton.setTextColor(Color.parseColor("#38BDF8"));
+                isPasswordVisible[0] = true;
+            }
+            if (passwordInput.getText() != null) {
+                passwordInput.setSelection(passwordInput.getText().length());
+            }
+        });
+
+        passwordContainer.addView(passwordInput);
+        passwordContainer.addView(eyeToggleButton);
 
         container.addView(passwordLabel);
-        container.addView(passwordInput);
+        container.addView(passwordContainer);
 
         // Error message text
         errorTextView = new TextView(this);
@@ -151,8 +194,63 @@ public class LoginActivity extends AppCompatActivity {
         loginButton.setOnClickListener(v -> attemptLogin());
         container.addView(loginButton);
 
+        // Server Domain / URL Configuration Button
+        TextView serverConfigText = new TextView(this);
+        serverConfigText.setText("⚙️ Server Domain: " + sessionManager.getBaseUrl());
+        serverConfigText.setTextSize(12f);
+        serverConfigText.setTextColor(Color.parseColor("#38BDF8"));
+        serverConfigText.setGravity(Gravity.CENTER);
+        serverConfigText.setPadding(0, 36, 0, 16);
+        serverConfigText.setOnClickListener(v -> showServerConfigDialog(serverConfigText));
+        container.addView(serverConfigText);
+
         root.addView(container);
         setContentView(root);
+    }
+
+    private void showServerConfigDialog(TextView serverConfigText) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Server Domain & API URL");
+
+        LinearLayout dialogLayout = new LinearLayout(this);
+        dialogLayout.setOrientation(LinearLayout.VERTICAL);
+        dialogLayout.setPadding(50, 24, 50, 12);
+
+        TextView infoText = new TextView(this);
+        infoText.setText("Enter the backend server domain or IP address to sync data (e.g., http://192.168.0.119:8000 or https://healthwatch.example.com):");
+        infoText.setTextSize(13f);
+        infoText.setTextColor(Color.parseColor("#475569"));
+        infoText.setPadding(0, 0, 0, 16);
+        dialogLayout.addView(infoText);
+
+        EditText input = new EditText(this);
+        input.setText(sessionManager.getBaseUrl());
+        input.setSingleLine(true);
+        input.setTextSize(14f);
+        dialogLayout.addView(input);
+
+        builder.setView(dialogLayout);
+
+        builder.setPositiveButton("Save", (dialog, which) -> {
+            String newUrl = input.getText() != null ? input.getText().toString().trim() : "";
+            if (!newUrl.isEmpty()) {
+                sessionManager.saveBaseUrl(newUrl);
+                String updatedUrl = sessionManager.getBaseUrl();
+                serverConfigText.setText("⚙️ Server Domain: " + updatedUrl);
+                Toast.makeText(this, "Server domain updated to: " + updatedUrl, Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        builder.setNeutralButton("Reset Default", (dialog, which) -> {
+            sessionManager.saveBaseUrl(SessionManager.DEFAULT_BASE_URL);
+            String defaultUrl = sessionManager.getBaseUrl();
+            serverConfigText.setText("⚙️ Server Domain: " + defaultUrl);
+            Toast.makeText(this, "Reset to default: " + defaultUrl, Toast.LENGTH_SHORT).show();
+        });
+
+        builder.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
+
+        builder.show();
     }
 
     private void attemptLogin() {
@@ -192,6 +290,14 @@ public class LoginActivity extends AppCompatActivity {
                 String displayName = user.getFullName() != null && !user.getFullName().isEmpty()
                         ? user.getFullName()
                         : user.getEmail();
+
+                if (user.isMustChangePassword()) {
+                    Toast.makeText(LoginActivity.this, "First login detected. Please set your permanent account password.", Toast.LENGTH_LONG).show();
+                    Intent resetIntent = new Intent(LoginActivity.this, ResetPasswordActivity.class);
+                    startActivity(resetIntent);
+                    finish();
+                    return;
+                }
 
                 Toast.makeText(LoginActivity.this, "Welcome, " + displayName, Toast.LENGTH_SHORT).show();
                 startActivity(new Intent(LoginActivity.this, DashboardActivity.class));

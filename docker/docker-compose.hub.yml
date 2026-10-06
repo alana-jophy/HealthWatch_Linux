@@ -1,0 +1,145 @@
+# ==============================================================================
+# HealthWatch - Docker Hub Production Deployment
+# Pulls pre-built microservices images directly from Docker Hub registry
+# ==============================================================================
+
+version: '3.8'
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Database: PostgreSQL 16 + PostGIS 3.4 Spatial Extension
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: healthwatch-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-healthwatch_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-HealthWatch_Prod_Secret_Pass_2026!}
+      POSTGRES_DB: ${POSTGRES_DB:-healthwatch_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-healthwatch_admin} -d ${POSTGRES_DB:-healthwatch_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - healthwatch-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ----------------------------------------------------------------------------
+  # 2. Backend: FastAPI + Gunicorn Multi-Worker (Pulled from Docker Hub)
+  # ----------------------------------------------------------------------------
+  backend:
+    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-backend:${HEALTHWATCH_VERSION:-1.0.0}
+    container_name: healthwatch-backend
+    restart: always
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-False}
+      - APP_NAME=${APP_NAME:-HealthWatch}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - API_V1_STR=${API_V1_STR:-/api/v1}
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-healthwatch_admin}:${POSTGRES_PASSWORD:-HealthWatch_Prod_Secret_Pass_2026!}@db:5432/${POSTGRES_DB:-healthwatch_db}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["*"]}
+      - WORKERS=${WORKERS:-4}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - healthwatch-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "30m"
+        max-file: "5"
+
+  # ----------------------------------------------------------------------------
+  # 3. Frontend: React 18 + Nginx Static Server (Pulled from Docker Hub)
+  # ----------------------------------------------------------------------------
+  frontend:
+    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-frontend:${HEALTHWATCH_VERSION:-1.0.0}
+    container_name: healthwatch-frontend
+    restart: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - healthwatch-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ----------------------------------------------------------------------------
+  # 4. API Gateway: Nginx Reverse Proxy & SSL (Pulled from Docker Hub)
+  # ----------------------------------------------------------------------------
+  gateway:
+    image: ${DOCKERHUB_USER:-YOUR_DOCKERHUB_USERNAME}/healthwatch-gateway:${HEALTHWATCH_VERSION:-1.0.0}
+    container_name: healthwatch-gateway
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - ENABLE_HTTPS=${ENABLE_HTTPS:-false}
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - healthwatch-net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ----------------------------------------------------------------------------
+  # 5. Let's Encrypt Certbot: Automated TLS Certificate Renewer
+  # ----------------------------------------------------------------------------
+  certbot:
+    image: certbot/certbot:latest
+    container_name: healthwatch-certbot
+    restart: unless-stopped
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done;'"
+    networks:
+      - healthwatch-net
+
+volumes:
+  postgres_data:
+    driver: local
+  certbot_conf:
+    driver: local
+  certbot_www:
+    driver: local
+
+networks:
+  healthwatch-net:
+    driver: bridge

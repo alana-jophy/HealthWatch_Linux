@@ -18,6 +18,7 @@ import {
   MapPin,
   CheckCircle2,
   Eye,
+  EyeOff,
   Plus,
   UserPlus,
   X,
@@ -73,6 +74,7 @@ export const PatientManagementView: React.FC = () => {
   const [addLocalBodies, setAddLocalBodies] = useState<LocalBodyGIS[]>([]);
   const [addWards, setAddWards] = useState<WardGIS[]>([]);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [showInitialPassword, setShowInitialPassword] = useState<boolean>(false);
   const [formData, setFormData] = useState({
     pseudo_id: '',
     full_name: '',
@@ -85,6 +87,7 @@ export const PatientManagementView: React.FC = () => {
     contact_number: '',
     tracking_interval_minutes: 15,
     tracking_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    monitoring_days: 14,
     disease_id: '',
     disease_name: '',
     address: '',
@@ -101,6 +104,7 @@ export const PatientManagementView: React.FC = () => {
   const [editLocalBodies, setEditLocalBodies] = useState<LocalBodyGIS[]>([]);
   const [editWards, setEditWards] = useState<WardGIS[]>([]);
   const [editPhoneError, setEditPhoneError] = useState<string | null>(null);
+  const [showEditPassword, setShowEditPassword] = useState<boolean>(false);
   const [editFormData, setEditFormData] = useState({
     full_name: '',
     email: '',
@@ -112,6 +116,7 @@ export const PatientManagementView: React.FC = () => {
     contact_number: '',
     tracking_interval_minutes: 15,
     tracking_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+    monitoring_days: 14,
     disease_id: '',
     disease_name: '',
     address: '',
@@ -438,6 +443,7 @@ export const PatientManagementView: React.FC = () => {
         contact_number: formData.has_phone ? formData.contact_number.trim() : null,
         tracking_interval_minutes: formData.has_phone ? formData.tracking_interval_minutes : 15,
         tracking_days: formData.has_phone ? formData.tracking_days.join(',') : undefined,
+        monitoring_days: Number(formData.monitoring_days) || 14,
         disease_id: formData.disease_id || undefined,
         disease_name: formData.disease_name || undefined,
         address: formData.address.trim(),
@@ -507,6 +513,7 @@ export const PatientManagementView: React.FC = () => {
       contact_number: p.contact_number || '',
       tracking_interval_minutes: p.tracking_interval_minutes || 15,
       tracking_days: p.tracking_days ? p.tracking_days.split(',').map((d) => d.trim()) : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+      monitoring_days: p.monitoring_days || 14,
       disease_id: p.disease_id || '',
       disease_name: p.disease_name || '',
       address: p.address || '',
@@ -634,6 +641,7 @@ export const PatientManagementView: React.FC = () => {
         contact_number: editFormData.has_phone ? (editFormData.contact_number ? editFormData.contact_number.trim() : null) : null,
         tracking_interval_minutes: editFormData.has_phone ? editFormData.tracking_interval_minutes : 15,
         tracking_days: editFormData.has_phone ? editFormData.tracking_days.join(',') : undefined,
+        monitoring_days: Number(editFormData.monitoring_days) || 14,
         disease_id: editFormData.disease_id || null,
         disease_name: editFormData.disease_name || null,
         address: editFormData.address.trim(),
@@ -945,9 +953,17 @@ export const PatientManagementView: React.FC = () => {
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
-                        {p.disease_name || 'Under Evaluation'}
-                      </span>
+                      <div>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                          {p.disease_name || 'Under Evaluation'}
+                        </span>
+                      </div>
+                      <div className="mt-1">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-mono font-medium bg-cyan-950/80 text-cyan-300 border border-cyan-800/60" title="Assigned surveillance monitoring duration">
+                          <Clock className="w-2.5 h-2.5 text-cyan-400" />
+                          {p.monitoring_days || 14}d Protocol
+                        </span>
+                      </div>
                     </td>
                     <td className="py-3.5 px-4 text-slate-300 font-mono text-[11px]">
                       {p.account_email || 'Linked User Account'}
@@ -1111,18 +1127,30 @@ export const PatientManagementView: React.FC = () => {
                       <Lock className="w-3 h-3 text-slate-400" />
                       Initial Password *
                     </label>
-                    <input
-                      type="password"
-                      required
-                      placeholder="Enter initial password"
-                      value={formData.initial_password}
-                      onChange={(e) => setFormData({ ...formData, initial_password: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showInitialPassword ? 'text' : 'password'}
+                        required
+                        placeholder="Enter initial password"
+                        value={formData.initial_password}
+                        onChange={(e) => setFormData({ ...formData, initial_password: e.target.value })}
+                        className="w-full px-3 py-2 pr-10 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono"
+                      />
+                      <button
+                        type="button"
+                        id="toggle-initial-password-btn"
+                        onClick={() => setShowInitialPassword(!showInitialPassword)}
+                        aria-label={showInitialPassword ? 'Hide password' : 'Show password'}
+                        title={showInitialPassword ? 'Hide password' : 'Show password'}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors p-1 cursor-pointer focus:outline-none"
+                      >
+                        {showInitialPassword ? <EyeOff className="w-3.5 h-3.5 text-brand-400" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  Patient can log into the phone app using either this Email or their Account ID (Pseudo ID).
+                  Patient can log into the phone app using this Initial Password (via Email or Account ID). They will be prompted to reset it to a personal password upon first login.
                 </p>
               </div>
 
@@ -1357,6 +1385,51 @@ export const PatientManagementView: React.FC = () => {
                     <span>No mobile phone. Patient will be represented by their official Kerala administrative centroid (STATIC_ADMIN_LOCATION) without fake GPS tracks.</span>
                   </div>
                 )}
+
+                {/* Surveillance / Monitoring Days Configuration */}
+                <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-300 text-[11px] font-semibold flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Monitoring Period (Days) *</span>
+                    </label>
+                    <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
+                      {formData.monitoring_days} Days Active Protocol
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[7, 14, 21, 28, 30].map((days) => (
+                      <button
+                        type="button"
+                        key={days}
+                        onClick={() => setFormData({ ...formData, monitoring_days: days })}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                          formData.monitoring_days === days
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {days} Days
+                      </button>
+                    ))}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-[10px] text-slate-400 font-sans">Custom:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={180}
+                        required
+                        value={formData.monitoring_days}
+                        onChange={(e) => setFormData({ ...formData, monitoring_days: Math.max(1, Number(e.target.value)) })}
+                        className="w-16 px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs font-mono text-center focus:border-cyan-400 focus:outline-none"
+                      />
+                      <span className="text-[10px] text-slate-400">days</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Defines the assigned surveillance & quarantine observation period. This can be edited anytime later.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -1759,6 +1832,51 @@ export const PatientManagementView: React.FC = () => {
                     <span>No mobile phone. Patient represented by static administrative centroid (STATIC_ADMIN_LOCATION).</span>
                   </div>
                 )}
+
+                {/* Surveillance / Monitoring Days Configuration (Editable) */}
+                <div className="pt-3 border-t border-slate-800/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-300 text-[11px] font-semibold flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Monitoring Period (Days) *</span>
+                    </label>
+                    <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
+                      {editFormData.monitoring_days} Days Active Protocol
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[7, 14, 21, 28, 30].map((days) => (
+                      <button
+                        type="button"
+                        key={days}
+                        onClick={() => setEditFormData({ ...editFormData, monitoring_days: days })}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer ${
+                          editFormData.monitoring_days === days
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {days} Days
+                      </button>
+                    ))}
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-[10px] text-slate-400 font-sans">Custom:</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={180}
+                        required
+                        value={editFormData.monitoring_days}
+                        onChange={(e) => setEditFormData({ ...editFormData, monitoring_days: Math.max(1, Number(e.target.value)) })}
+                        className="w-16 px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white text-xs font-mono text-center focus:border-cyan-400 focus:outline-none"
+                      />
+                      <span className="text-[10px] text-slate-400">days</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Edit the assigned quarantine/surveillance monitoring window for this patient.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-1">
@@ -1791,13 +1909,25 @@ export const PatientManagementView: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <label className="text-slate-400 text-[11px] font-semibold">New Password (leave blank to keep)</label>
-                    <input
-                      type="password"
-                      placeholder="••••••••••••"
-                      value={editFormData.password}
-                      onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showEditPassword ? 'text' : 'password'}
+                        placeholder="••••••••••••"
+                        value={editFormData.password}
+                        onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                        className="w-full px-3 py-2 pr-10 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono"
+                      />
+                      <button
+                        type="button"
+                        id="toggle-edit-password-btn"
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                        aria-label={showEditPassword ? 'Hide password' : 'Show password'}
+                        title={showEditPassword ? 'Hide password' : 'Show password'}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors p-1 cursor-pointer focus:outline-none"
+                      >
+                        {showEditPassword ? <EyeOff className="w-3.5 h-3.5 text-brand-400" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2065,6 +2195,17 @@ export const PatientManagementView: React.FC = () => {
                     ) : (
                       <span className="font-mono text-emerald-400">{selectedPatient.contact_number}</span>
                     )}
+                  </span>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1 col-span-2">
+                  <span className="text-slate-500 block text-[10px] uppercase font-mono flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-cyan-400" />
+                    Assigned Surveillance Monitoring Period
+                  </span>
+                  <span className="font-semibold text-cyan-300 text-xs block font-mono flex items-center gap-2">
+                    <span>{selectedPatient.monitoring_days || 14} Days Protocol</span>
+                    <span className="text-slate-500">&bull;</span>
+                    <span className="text-slate-400 font-sans text-[11px]">Active: {selectedPatient.tracking_days || 'All Days'}</span>
                   </span>
                 </div>
               </div>

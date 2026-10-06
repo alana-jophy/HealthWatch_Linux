@@ -8,6 +8,7 @@ import com.healthwatch.data.local.SessionManager;
 import com.healthwatch.data.model.AuthModels.UserResponse;
 import com.healthwatch.ui.DashboardActivity;
 import com.healthwatch.ui.LoginActivity;
+import com.healthwatch.ui.ResetPasswordActivity;
 
 /**
  * HealthWatch Mobile Main Entry Point.
@@ -29,6 +30,13 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        // Check if cached session requires immediate password change
+        if (sessionManager.mustChangePassword()) {
+            startActivity(new Intent(this, ResetPasswordActivity.class));
+            finish();
+            return;
+        }
+
         // Validate token against backend /api/auth/me
         apiClient.getMe(new HealthWatchApiClient.ApiCallback<UserResponse>() {
             @Override
@@ -39,9 +47,14 @@ public class MainActivity extends AppCompatActivity {
                             user.getFullName(),
                             user.getRole(),
                             user.getPatientPseudoId(),
-                            user.getPatientId()
+                            user.getPatientId(),
+                            user.isMustChangePassword()
                     );
-                    startActivity(new Intent(MainActivity.this, DashboardActivity.class));
+                    if (user.isMustChangePassword()) {
+                        startActivity(new Intent(MainActivity.this, ResetPasswordActivity.class));
+                    } else {
+                        startActivity(new Intent(MainActivity.this, DashboardActivity.class));
+                    }
                 } else {
                     sessionManager.clearSession();
                     startActivity(new Intent(MainActivity.this, LoginActivity.class));

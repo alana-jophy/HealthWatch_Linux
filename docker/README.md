@@ -98,9 +98,10 @@ The automation script [`push_to_dockerhub.sh`](file:///home/alana/Desktop/health
 
 | Option | Shorthand | Description | Default |
 | :--- | :--- | :--- | :--- |
-| `--username <name>` | `-u` | Docker Hub username or org namespace | Prompts or reads `$DOCKERHUB_USER` |
+| `--username <name>` | `-u` | Docker Hub username or org namespace | Auto-detected from `~/.docker/config.json` or `$DOCKERHUB_USER` |
 | `--tag <version>` | `-t` | Version tag to push (also tags `:latest`) | `APP_VERSION` from `.env.production` or `1.0.0` |
-| `--token <token>` | | Personal Access Token or password | Prompts or reads `$DOCKERHUB_TOKEN` |
+| `--token <token>` | | Personal Access Token or password | Auto-detected from `~/.docker/config.json` or `$DOCKERHUB_TOKEN` |
+| `--docker-config <path>` | | Custom Docker config file path | `~/.docker/config.json` |
 | `--skip-readme` | | Push images only; skip updating READMEs | `false` |
 | `--dry-run` | | Print commands without executing | `false` |
 | `--help` | `-h` | Display usage manual and examples | |
@@ -109,13 +110,14 @@ The automation script [`push_to_dockerhub.sh`](file:///home/alana/Desktop/health
 
 ### Execution Examples
 
-#### 1. Interactive Mode
+#### 1. Automatic Execution (Uses Saved Credentials from `~/.docker/config.json`)
+If you have already logged in via `docker login`, the script will automatically detect your username and token:
 ```bash
 ./docker/push_to_dockerhub.sh
 ```
-*Prompts for your Docker Hub username and your PAT.*
+*Zero-prompt: automatically pushes images and syncs all three README overviews.*
 
-#### 2. Fully Automated (CI/CD / Scripted)
+#### 2. Fully Automated (CI/CD / Custom Credentials)
 ```bash
 ./docker/push_to_dockerhub.sh -u mydockerhubuser -t 1.0.0 --token "dckr_pat_xxxx"
 ```
@@ -129,7 +131,7 @@ export DOCKERHUB_TOKEN="dckr_pat_xxxx"
 
 #### 4. Preview Execution (Dry-Run)
 ```bash
-./docker/push_to_dockerhub.sh -u mydockerhubuser --dry-run
+./docker/push_to_dockerhub.sh --dry-run
 ```
 
 ---

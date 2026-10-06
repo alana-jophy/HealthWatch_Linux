@@ -222,13 +222,13 @@ HealthWatch provides a turnkey automation script [`docker/push_to_dockerhub.sh`]
 
 ### Execution Modes
 
-#### Option A: Interactive Mode (Prompts for Username & Token)
+#### Option A: Automatic Execution (Uses Saved Credentials from `~/.docker/config.json`)
+If you have already logged in via `docker login`, the script automatically detects your credentials without any prompts:
 ```bash
 ./docker/push_to_dockerhub.sh
 ```
-*Prompts for your Docker Hub username and optional Personal Access Token.*
 
-#### Option B: Automated / CI/CD One-Liner
+#### Option B: Automated / CI/CD One-Liner (Explicit Credentials)
 ```bash
 ./docker/push_to_dockerhub.sh -u your-dockerhub-username -t 1.0.0 --token "dckr_pat_xxxx"
 ```
@@ -242,7 +242,7 @@ export DOCKERHUB_TOKEN="dckr_pat_xxxx"
 
 #### Option D: Dry-Run Mode (Preview Actions Without Pushing)
 ```bash
-./docker/push_to_dockerhub.sh -u your-dockerhub-username --dry-run
+./docker/push_to_dockerhub.sh --dry-run
 ```
 
 ---
@@ -251,9 +251,10 @@ export DOCKERHUB_TOKEN="dckr_pat_xxxx"
 
 | Option | Flag | Description | Default |
 | :--- | :--- | :--- | :--- |
-| **Username** | `-u`, `--username` | Docker Hub username or organization namespace | Prompt or `$DOCKERHUB_USER` |
+| **Username** | `-u`, `--username` | Docker Hub username or organization namespace | Auto-detected from `~/.docker/config.json` or `$DOCKERHUB_USER` |
 | **Version Tag** | `-t`, `--tag` | Image version tag to publish | `APP_VERSION` from `.env.production` or `1.0.0` |
-| **Access Token**| `--token` | Docker Hub PAT (required for API README sync) | `$DOCKERHUB_TOKEN` or prompt |
+| **Access Token**| `--token` | Docker Hub PAT (required for API README sync) | Auto-detected from `~/.docker/config.json` or `$DOCKERHUB_TOKEN` |
+| **Docker Config**| `--docker-config` | Custom Docker config file path | `~/.docker/config.json` |
 | **Skip README** | `--skip-readme` | Push Docker images only, skip API docs upload | `false` |
 | **Dry Run** | `--dry-run` | Print commands without executing | `false` |
 | **Help** | `-h`, `--help` | Display script usage and examples | |

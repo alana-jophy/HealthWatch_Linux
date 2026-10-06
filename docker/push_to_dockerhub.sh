@@ -10,13 +10,13 @@
 set -euo pipefail
 
 # Text formatting
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+BLUE=$'\033[0;34m'
+YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
+NC=$'\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -41,22 +41,26 @@ usage() {
 ${BOLD}Usage:${NC} $0 [options]
 
 ${BOLD}Options:${NC}
-  -u, --username <name>    Docker Hub username or organization namespace (or set DOCKERHUB_USER)
+  -u, --username <name>    Docker Hub username or organization namespace (default: auto-detected from ~/.docker/config.json or DOCKERHUB_USER)
   -t, --tag <tag>          Image version tag to publish (default: 1.0.0)
-  --token <token>          Docker Hub Personal Access Token or password (or set DOCKERHUB_TOKEN)
+  --token <token>          Docker Hub Personal Access Token or password (default: auto-detected from ~/.docker/config.json or DOCKERHUB_TOKEN)
+  --docker-config <path>   Custom Docker config JSON path (default: ~/.docker/config.json)
   --skip-readme            Push Docker images only; skip updating Docker Hub README overviews
   --dry-run                Print actions without tagging, pushing, or making API calls
   -h, --help               Display this help message
 
 ${BOLD}Examples:${NC}
-  # Interactive mode (prompts for username and optional token):
+  # Interactive / Auto mode (reads credentials directly from ~/.docker/config.json):
   $0
 
-  # Automated CI/CD execution:
+  # Automated execution with custom tag:
+  $0 -t 1.0.0
+
+  # Override credentials or namespace:
   $0 -u mydockerhubuser --token dckr_pat_xxxx --tag 1.0.0
 
-  # Preview commands without executing:
-  $0 -u mydockerhubuser --dry-run
+  # Preview actions without pushing:
+  $0 --dry-run
 EOF
     exit 0
 }
@@ -74,6 +78,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --token)
             DOCKERHUB_TOKEN="$2"
+            shift 2
+            ;;
+        --docker-config)
+            DOCKER_CONFIG_FILE="$2"
             shift 2
             ;;
         --skip-readme)
@@ -94,6 +102,87 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Auto-detect credentials from Docker configuration if not explicitly provided
+DOCKER_CONFIG_DIR="${DOCKER_CONFIG:-${HOME}/.docker}"
+DOCKER_CONFIG_FILE="${DOCKER_CONFIG_FILE:-${DOCKER_CONFIG_DIR}/config.json}"
+LOADED_USER_FROM_CONFIG=false
+LOADED_TOKEN_FROM_CONFIG=false
+
+if [[ -f "${DOCKER_CONFIG_FILE}" ]] && command -v python3 >/dev/null 2>&1; then
+    mapfile -t CRED_DATA < <(python3 - "${DOCKER_CONFIG_FILE}" << 'PYEOF'
+import sys
+import json
+import base64
+import shutil
+import subprocess
+
+config_path = sys.argv[1]
+try:
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+
+    auths = cfg.get("auths", {})
+    registries = [
+        "https://index.docker.io/v1/",
+        "index.docker.io/v1/",
+        "https://registry-1.docker.io/v2/",
+        "registry-1.docker.io",
+        "docker.io"
+    ]
+
+    # 1. Direct auth entries in config.json
+    for reg in registries:
+        if reg in auths and "auth" in auths[reg]:
+            decoded = base64.b64decode(auths[reg]["auth"]).decode("utf-8", errors="ignore")
+            if ":" in decoded:
+                user, secret = decoded.split(":", 1)
+                if user and secret:
+                    print(user)
+                    print(secret)
+                    sys.exit(0)
+
+    # 2. Check credential helpers / credStore if configured
+    helper = None
+    cred_helpers = cfg.get("credHelpers", {})
+    for reg in registries:
+        if reg in cred_helpers:
+            helper = f"docker-credential-{cred_helpers[reg]}"
+            target = reg
+            break
+    if not helper and "credsStore" in cfg:
+        helper = f"docker-credential-{cfg['credsStore']}"
+        target = "https://index.docker.io/v1/"
+
+    if helper and shutil.which(helper):
+        proc = subprocess.run([helper, "get"], input=target.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode == 0:
+            res = json.loads(proc.stdout.decode())
+            user = res.get("Username") or res.get("ServerURL")
+            secret = res.get("Secret")
+            if user and secret:
+                print(user)
+                print(secret)
+                sys.exit(0)
+except Exception:
+    pass
+PYEOF
+)
+    CFG_USER="${CRED_DATA[0]:-}"
+    CFG_TOKEN="${CRED_DATA[1]:-}"
+
+    if [[ -z "${DOCKERHUB_USER}" ]] && [[ -n "${CFG_USER}" ]]; then
+        DOCKERHUB_USER="${CFG_USER}"
+        LOADED_USER_FROM_CONFIG=true
+    fi
+
+    if [[ -z "${DOCKERHUB_TOKEN}" ]] && [[ -n "${CFG_TOKEN}" ]]; then
+        if [[ "${DOCKERHUB_USER}" == "${CFG_USER}" ]]; then
+            DOCKERHUB_TOKEN="${CFG_TOKEN}"
+            LOADED_TOKEN_FROM_CONFIG=true
+        fi
+    fi
+fi
+
 echo -e "${CYAN}${BOLD}================================================================${NC}"
 echo -e "${CYAN}${BOLD}       HealthWatch Docker Hub Publisher & Documentation Sync     ${NC}"
 echo -e "${CYAN}${BOLD}================================================================${NC}"
@@ -104,12 +193,16 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 
+if [[ "${LOADED_USER_FROM_CONFIG}" = true ]] || [[ "${LOADED_TOKEN_FROM_CONFIG}" = true ]]; then
+    echo -e "  ${GREEN}✓${NC} Loaded credentials from ${BOLD}${DOCKER_CONFIG_FILE}${NC} (User: ${BOLD}${DOCKERHUB_USER}${NC})"
+fi
+
 # Prompt for username if not provided
 if [[ -z "${DOCKERHUB_USER}" ]]; then
     if [[ -t 0 ]]; then
         read -rp "Enter your Docker Hub username (e.g. johndoe): " DOCKERHUB_USER
     else
-        echo -e "${RED}[ERROR] Docker Hub username not specified. Set DOCKERHUB_USER or use -u <username>.${NC}"
+        echo -e "${RED}[ERROR] Docker Hub username not specified. Set DOCKERHUB_USER, use -u <username>, or configure ~/.docker/config.json.${NC}"
         exit 1
     fi
 fi
@@ -121,6 +214,7 @@ fi
 
 echo -e "${BLUE}Target Registry Namespace:${NC} ${BOLD}${DOCKERHUB_USER}${NC}"
 echo -e "${BLUE}Target Version Tag:       ${NC} ${BOLD}${VERSION_TAG}${NC} (and ${BOLD}latest${NC})"
+echo -e "${BLUE}Docker Hub Credentials:   ${NC} $(if [[ -n "${DOCKERHUB_TOKEN}" ]]; then echo -e "${GREEN}Configured (Token loaded)${NC}"; else echo -e "${YELLOW}Not configured (will prompt for README sync)${NC}"; fi)"
 echo -e "${BLUE}Dry Run Mode:             ${NC} ${BOLD}${DRY_RUN}${NC}"
 echo ""
 
@@ -162,8 +256,12 @@ if [[ "${DRY_RUN}" = false ]]; then
     echo ""
     echo -e "${CYAN}==> Checking Docker Hub authentication...${NC}"
     if ! docker info 2>/dev/null | grep -q "Username: ${DOCKERHUB_USER}"; then
-        echo -e "${YELLOW}Please authenticate with Docker Hub:${NC}"
-        docker login -u "${DOCKERHUB_USER}"
+        echo -e "${YELLOW}Authenticating with Docker Hub for ${BOLD}${DOCKERHUB_USER}${NC}...${NC}"
+        if [[ -n "${DOCKERHUB_TOKEN}" ]]; then
+            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USER}" --password-stdin
+        else
+            docker login -u "${DOCKERHUB_USER}"
+        fi
     else
         echo -e "  ${GREEN}✓${NC} Authenticated as ${BOLD}${DOCKERHUB_USER}${NC}"
     fi

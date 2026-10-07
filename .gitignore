@@ -104,6 +104,8 @@ mobile/.cxx/
 *.keystore
 *.jks
 *HealthWatch-v*.apk
+*.apk_version
+.last_built_apk_version
 
 # AI / ML Model Artifacts & Data
 ai/models/*.pkl

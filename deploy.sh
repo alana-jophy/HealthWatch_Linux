@@ -56,12 +56,59 @@ check_prerequisites() {
 }
 
 load_env() {
+    # If a custom version was passed via CLI flags or arguments, synchronize into env file
+    if [ -n "$CUSTOM_VERSION" ]; then
+        APP_VERSION="$CUSTOM_VERSION"
+        if [ -f "$ENV_FILE" ]; then
+            if grep -q '^APP_VERSION=' "$ENV_FILE"; then
+                sed -i "s/^APP_VERSION=.*/APP_VERSION=${APP_VERSION}/" "$ENV_FILE"
+            else
+                echo "APP_VERSION=${APP_VERSION}" >> "$ENV_FILE"
+            fi
+        fi
+    fi
+
     export $(grep -v '^#' "$ENV_FILE" | xargs)
     DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
     ENABLE_HTTPS="${ENABLE_HTTPS:-false}"
     SSL_EMAIL="${SSL_EMAIL:-admin@example.com}"
     APP_VERSION="${CUSTOM_VERSION:-${APP_VERSION:-1.0.0}}"
     export APP_VERSION
+}
+
+check_apk_needs_rebuild() {
+    local FORCE="${1:-false}"
+    if [ "$FORCE" = "true" ]; then
+        echo "true"
+        return 0
+    fi
+
+    local TARGET_APK="HealthWatch-v${APP_VERSION}.apk"
+    local LAST_VERSION=""
+    if [ -f "mobile/.last_built_apk_version" ]; then
+        LAST_VERSION=$(cat "mobile/.last_built_apk_version" 2>/dev/null | tr -d '\r\n ')
+    fi
+
+    # Condition 1: Last built version does not match active APP_VERSION in env file
+    if [ "$LAST_VERSION" != "$APP_VERSION" ]; then
+        echo "true"
+        return 0
+    fi
+
+    # Condition 2: Target versioned APK file missing in backend or frontend distribution dirs
+    if [ ! -f "backend/app/$TARGET_APK" ] || [ ! -f "frontend/public/$TARGET_APK" ]; then
+        echo "true"
+        return 0
+    fi
+
+    # Condition 3: Default HealthWatch.apk installer missing
+    if [ ! -f "backend/app/HealthWatch.apk" ] || [ ! -f "frontend/public/HealthWatch.apk" ]; then
+        echo "true"
+        return 0
+    fi
+
+    echo "false"
+    return 0
 }
 
 cleanup_old_apks() {
@@ -95,24 +142,79 @@ cleanup_old_apks() {
         cp -f "frontend/public/$TARGET_APK" "backend/app/HealthWatch.apk"
     fi
 
-    echo -e "${GREEN}✓ Pruned $REMOVED_COUNT obsolete APK file(s). Active release synchronized: v${APP_VERSION}.${NC}"
+    # Hot-sync to running containers if active
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^healthwatch-backend$"; then
+        if [ -f "backend/app/$TARGET_APK" ]; then
+            docker cp "backend/app/$TARGET_APK" healthwatch-backend:/app/app/$TARGET_APK 2>/dev/null || true
+            docker cp "backend/app/$TARGET_APK" healthwatch-backend:/app/app/HealthWatch.apk 2>/dev/null || true
+        fi
+    fi
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^healthwatch-frontend$"; then
+        if [ -f "frontend/public/$TARGET_APK" ]; then
+            docker cp "frontend/public/$TARGET_APK" healthwatch-frontend:/usr/share/nginx/html/$TARGET_APK 2>/dev/null || true
+            docker cp "frontend/public/$TARGET_APK" healthwatch-frontend:/usr/share/nginx/html/HealthWatch.apk 2>/dev/null || true
+        fi
+    fi
+
+    echo -e "${GREEN}✓ Obsolete APK versions pruned ($REMOVED_COUNT removed). Active release synchronized: v${APP_VERSION}.${NC}"
 }
 
 build_apk() {
-    cleanup_old_apks
-    if [ -f "mobile/build_apk_linux.sh" ] && command -v java &>/dev/null; then
-        echo -e "\n${BLUE}[APK] Compiling HealthWatch Android APK for domain '${DOMAIN_NAME}' (v${APP_VERSION})...${NC}"
-        SERVER_DOMAIN="${DOMAIN_NAME}" ENABLE_HTTPS="${ENABLE_HTTPS}" APP_VERSION="${APP_VERSION}" bash mobile/build_apk_linux.sh || echo -e "${YELLOW}Notice: APK compilation skipped or failed; existing APK will be used.${NC}"
+    local FORCE_REBUILD="${1:-false}"
+    local TARGET_APK="HealthWatch-v${APP_VERSION}.apk"
+    local LAST_VERSION=""
+    if [ -f "mobile/.last_built_apk_version" ]; then
+        LAST_VERSION=$(cat "mobile/.last_built_apk_version" 2>/dev/null | tr -d '\r\n ')
+    fi
+
+    local NEEDS_REBUILD
+    NEEDS_REBUILD=$(check_apk_needs_rebuild "$FORCE_REBUILD")
+
+    if [ "$NEEDS_REBUILD" = "true" ]; then
+        echo -e "\n${CYAN}====================================================================${NC}"
+        if [ "$FORCE_REBUILD" = "true" ]; then
+            echo -e "${CYAN}  [APK] Force rebuild requested for Android APK                     ${NC}"
+        elif [ -n "$LAST_VERSION" ] && [ "$LAST_VERSION" != "$APP_VERSION" ]; then
+            echo -e "${CYAN}  [APK] New version tag detected in env file: v${APP_VERSION} (previous: v${LAST_VERSION})${NC}"
+        elif [ ! -f "backend/app/$TARGET_APK" ]; then
+            echo -e "${CYAN}  [APK] Target APK missing for v${APP_VERSION}. Initiating build...            ${NC}"
+        else
+            echo -e "${CYAN}  [APK] Triggering clean build of HealthWatch APK v${APP_VERSION}...          ${NC}"
+        fi
+        echo -e "${CYAN}  Target: v${APP_VERSION} | Domain: ${DOMAIN_NAME} | HTTPS: ${ENABLE_HTTPS}   ${NC}"
+        echo -e "${CYAN}====================================================================${NC}"
+
+        if [ ! -f "mobile/build_apk_linux.sh" ]; then
+            echo -e "${RED}Error: 'mobile/build_apk_linux.sh' not found.${NC}"
+            exit 1
+        fi
+
+        if ! command -v java &>/dev/null && [ ! -d "/usr/lib/jvm/java-17-openjdk-amd64" ] && [ ! -d "$HOME/jdk-17" ]; then
+            echo -e "${RED}Error: OpenJDK 17 ('java') is required to build the APK but not found.${NC}"
+            echo -e "${YELLOW}Please install OpenJDK 17: sudo apt install -y openjdk-17-jdk-headless${NC}"
+            exit 1
+        fi
+
+        echo -e "\n${BLUE}Compiling Android APK with Gradle for release v${APP_VERSION}...${NC}"
+        SERVER_DOMAIN="${DOMAIN_NAME}" ENABLE_HTTPS="${ENABLE_HTTPS}" APP_VERSION="${APP_VERSION}" bash mobile/build_apk_linux.sh
+
+        if [ ! -f "backend/app/$TARGET_APK" ] || [ ! -f "frontend/public/$TARGET_APK" ]; then
+            echo -e "${RED}Error: APK build finished but 'HealthWatch-v${APP_VERSION}.apk' was not found!${NC}"
+            exit 1
+        fi
+
+        echo "$APP_VERSION" > "mobile/.last_built_apk_version"
+        echo -e "${GREEN}✓ Successfully built and deployed HealthWatch APK v${APP_VERSION}.${NC}"
         cleanup_old_apks
     else
-        echo -e "\n${BLUE}[APK] Ensuring synchronized versioned APK artifacts for v${APP_VERSION}...${NC}"
+        echo -e "\n${GREEN}✓ Android APK is already up-to-date for v${APP_VERSION} (backend/app/$TARGET_APK). Rebuild skipped.${NC}"
+        echo -e "  ${YELLOW}(Run './deploy.sh apk' to force an immediate clean rebuild if needed)${NC}"
         cleanup_old_apks
     fi
 }
 
 build_images() {
-    cleanup_old_apks
-    build_apk
+    build_apk false
     echo -e "\n${BLUE}[2/4] Building production microservices Docker images (Tag: ${APP_VERSION})...${NC}"
     APP_VERSION="${APP_VERSION}" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
     
@@ -255,7 +357,7 @@ case "$ACTION" in
         start_https
         ;;
     apk)
-        build_apk
+        build_apk true
         ;;
     build)
         build_images

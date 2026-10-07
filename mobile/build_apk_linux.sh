@@ -93,8 +93,11 @@ else
     echo "[INFO] No SERVER_DOMAIN or DOMAIN_NAME detected; using default fallback."
 fi
 
-# 5. Build APK
-echo "[INFO] Building HealthWatch Android APK..."
+# 5. Clean stale build artifacts and build APK
+echo "[INFO] Cleaning previous mobile build outputs..."
+rm -rf "$REPO_ROOT/mobile/app/build"
+
+echo "[INFO] Building HealthWatch Android APK (v${TARGET_APP_VERSION})..."
 cd "$REPO_ROOT/mobile"
 gradle assembleDebug $GRADLE_ARGS --no-daemon
 
@@ -130,8 +133,25 @@ if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
     cp -f "$APK_SRC" "$REPO_ROOT/backend/app/$VERSIONED_NAME"
     cp -f "$APK_SRC" "$REPO_ROOT/backend/app/HealthWatch.apk"
 
-    # 5. Clean stale build output artifacts
+    # 5. Record version marker files
+    echo "$TARGET_APP_VERSION" > "$REPO_ROOT/mobile/.last_built_apk_version"
+    echo "$TARGET_APP_VERSION" > "$REPO_ROOT/backend/app/.apk_version"
+    echo "$TARGET_APP_VERSION" > "$REPO_ROOT/frontend/public/.apk_version"
+
+    # 6. Clean stale build output artifacts
     find "$APK_OUTPUT_DIR" -maxdepth 1 -name "*.apk" ! -name "$VERSIONED_NAME" -type f -delete 2>/dev/null || true
+
+    # 7. Hot-sync to running docker containers if active
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^healthwatch-backend$"; then
+        echo "[INFO] Hot-syncing APK into running healthwatch-backend container..."
+        docker cp "$APK_SRC" healthwatch-backend:/app/app/$VERSIONED_NAME 2>/dev/null || true
+        docker cp "$APK_SRC" healthwatch-backend:/app/app/HealthWatch.apk 2>/dev/null || true
+    fi
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^healthwatch-frontend$"; then
+        echo "[INFO] Hot-syncing APK into running healthwatch-frontend container..."
+        docker cp "$APK_SRC" healthwatch-frontend:/usr/share/nginx/html/$VERSIONED_NAME 2>/dev/null || true
+        docker cp "$APK_SRC" healthwatch-frontend:/usr/share/nginx/html/HealthWatch.apk 2>/dev/null || true
+    fi
 
     echo "[SUCCESS] Real Android APK created and deployed:"
     echo "  -> $REPO_ROOT/frontend/public/$VERSIONED_NAME"

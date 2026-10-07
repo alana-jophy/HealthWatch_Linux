@@ -93,14 +93,37 @@ def create_application() -> FastAPI:
     @application.get("/download/app", tags=["Mobile App"], summary="Download Native Android APK")
     @application.get("/download/healthwatch.apk", tags=["Mobile App"], summary="Download Native Android APK")
     @application.get("/HealthWatch.apk", tags=["Mobile App"], summary="Download Native Android APK")
-    def download_android_apk():
-        apk_path = os.path.join(os.path.dirname(__file__), "HealthWatch.apk")
-        if not os.path.exists(apk_path):
-            raise HTTPException(status_code=404, detail="HealthWatch.apk not found on server")
+    @application.get("/HealthWatch-{version_tag}.apk", tags=["Mobile App"], summary="Download Versioned Native Android APK")
+    def download_android_apk(version_tag: str = None):
+        base_dir = os.path.dirname(__file__)
+        v_name = f"HealthWatch-v{settings.APP_VERSION}.apk"
+
+        candidates = []
+        if version_tag:
+            clean_tag = version_tag.lstrip("v")
+            candidates.append(os.path.join(base_dir, f"HealthWatch-{version_tag}.apk"))
+            candidates.append(os.path.join(base_dir, f"HealthWatch-v{clean_tag}.apk"))
+        candidates.append(os.path.join(base_dir, v_name))
+        candidates.append(os.path.join(base_dir, f"HealthWatch-{settings.APP_VERSION}.apk"))
+        candidates.append(os.path.join(base_dir, "HealthWatch.apk"))
+
+        target_path = None
+        for cand in candidates:
+            if os.path.exists(cand):
+                target_path = cand
+                break
+
+        if not target_path:
+            raise HTTPException(status_code=404, detail="HealthWatch APK installer not found on server")
+
+        download_name = os.path.basename(target_path)
+        if download_name == "HealthWatch.apk":
+            download_name = v_name
+
         return FileResponse(
-            path=apk_path,
+            path=target_path,
             media_type="application/vnd.android.package-archive",
-            filename="HealthWatch.apk"
+            filename=download_name,
         )
 
     @application.get("/", tags=["Root"])
@@ -108,6 +131,8 @@ def create_application() -> FastAPI:
         return {
             "name": settings.APP_NAME,
             "version": settings.APP_VERSION,
+            "apk_download": f"/HealthWatch-v{settings.APP_VERSION}.apk",
+            "apk_filename": f"HealthWatch-v{settings.APP_VERSION}.apk",
             "status": "online",
             "docs": "/docs",
             "health": "/api/health",

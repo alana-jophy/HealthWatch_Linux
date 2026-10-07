@@ -66,8 +66,16 @@ load_env() {
 
 build_apk() {
     if [ -f "mobile/build_apk_linux.sh" ] && command -v java &>/dev/null; then
-        echo -e "\n${BLUE}[APK] Compiling HealthWatch Android APK for domain '${DOMAIN_NAME}'...${NC}"
-        SERVER_DOMAIN="${DOMAIN_NAME}" ENABLE_HTTPS="${ENABLE_HTTPS}" bash mobile/build_apk_linux.sh || echo -e "${YELLOW}Notice: APK compilation skipped or failed; existing APK will be used.${NC}"
+        echo -e "\n${BLUE}[APK] Compiling HealthWatch Android APK for domain '${DOMAIN_NAME}' (v${APP_VERSION})...${NC}"
+        SERVER_DOMAIN="${DOMAIN_NAME}" ENABLE_HTTPS="${ENABLE_HTTPS}" APP_VERSION="${APP_VERSION}" bash mobile/build_apk_linux.sh || echo -e "${YELLOW}Notice: APK compilation skipped or failed; existing APK will be used.${NC}"
+    else
+        echo -e "\n${BLUE}[APK] Ensuring versioned APK artifacts for v${APP_VERSION}...${NC}"
+        if [ -f "frontend/public/HealthWatch.apk" ]; then
+            cp -f "frontend/public/HealthWatch.apk" "frontend/public/HealthWatch-v${APP_VERSION}.apk" 2>/dev/null || true
+        fi
+        if [ -f "backend/app/HealthWatch.apk" ]; then
+            cp -f "backend/app/HealthWatch.apk" "backend/app/HealthWatch-v${APP_VERSION}.apk" 2>/dev/null || true
+        fi
     fi
 }
 

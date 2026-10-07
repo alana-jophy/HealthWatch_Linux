@@ -5,6 +5,9 @@ echo "============================================================"
 echo "HEALTHWATCH ANDROID APK BUILD SCRIPT (LINUX NATIVE)"
 echo "============================================================"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 if [ -d "$HOME/jdk-17" ]; then
     export JAVA_HOME="$HOME/jdk-17"
 else
@@ -16,7 +19,7 @@ export ANDROID_HOME="$HOME/android-sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
 
-echo "sdk.dir=$ANDROID_HOME" > "/home/alana/Desktop/healthwatch/mobile/local.properties"
+echo "sdk.dir=$ANDROID_HOME" > "$REPO_ROOT/mobile/local.properties"
 
 # 1. Download command line tools if not present
 if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
@@ -46,57 +49,86 @@ if [ ! -d "$GRADLE_DIR" ]; then
 fi
 export PATH="$GRADLE_DIR/bin:$PATH"
 
-# 4. Detect Server Domain from environment or .env file
-REPO_ROOT="/home/alana/Desktop/healthwatch"
+# 4. Detect Configuration from environment or .env files
+ENV_FILE=""
+if [ -f "$REPO_ROOT/.env.production" ]; then
+    ENV_FILE="$REPO_ROOT/.env.production"
+elif [ -f "$REPO_ROOT/.env" ]; then
+    ENV_FILE="$REPO_ROOT/.env"
+fi
+
+# A. Version detection
+TARGET_APP_VERSION="${APP_VERSION:-}"
+if [ -z "$TARGET_APP_VERSION" ] && [ -n "$ENV_FILE" ]; then
+    TARGET_APP_VERSION=$(grep -E '^APP_VERSION=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
+fi
+TARGET_APP_VERSION="${TARGET_APP_VERSION:-1.0.0}"
+echo "[INFO] Building APK for Application Version: $TARGET_APP_VERSION"
+
+# B. Server domain detection
 TARGET_DOMAIN="${SERVER_DOMAIN:-}"
-
-if [ -z "$TARGET_DOMAIN" ]; then
-    ENV_FILE=""
-    if [ -f "$REPO_ROOT/.env.production" ]; then
-        ENV_FILE="$REPO_ROOT/.env.production"
-    elif [ -f "$REPO_ROOT/.env" ]; then
-        ENV_FILE="$REPO_ROOT/.env"
-    fi
-
-    if [ -n "$ENV_FILE" ]; then
-        echo "[INFO] Reading server domain configuration from $ENV_FILE..."
-        FILE_DOMAIN=$(grep -E '^(SERVER_DOMAIN|DOMAIN_NAME)=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
-        FILE_HTTPS=$(grep -E '^ENABLE_HTTPS=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
-        if [ -n "$FILE_DOMAIN" ]; then
-            if [[ ! "$FILE_DOMAIN" =~ ^https?:// ]]; then
-                if [ "$FILE_HTTPS" = "true" ]; then
-                    TARGET_DOMAIN="https://$FILE_DOMAIN"
-                else
-                    TARGET_DOMAIN="http://$FILE_DOMAIN"
-                fi
+if [ -z "$TARGET_DOMAIN" ] && [ -n "$ENV_FILE" ]; then
+    echo "[INFO] Reading server domain configuration from $ENV_FILE..."
+    FILE_DOMAIN=$(grep -E '^(SERVER_DOMAIN|DOMAIN_NAME)=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
+    FILE_HTTPS=$(grep -E '^ENABLE_HTTPS=' "$ENV_FILE" | head -n 1 | cut -d'=' -f2- | tr -d '"\r ')
+    if [ -n "$FILE_DOMAIN" ]; then
+        if [[ ! "$FILE_DOMAIN" =~ ^https?:// ]]; then
+            if [ "$FILE_HTTPS" = "true" ]; then
+                TARGET_DOMAIN="https://$FILE_DOMAIN"
             else
-                TARGET_DOMAIN="$FILE_DOMAIN"
+                TARGET_DOMAIN="http://$FILE_DOMAIN"
             fi
+        else
+            TARGET_DOMAIN="$FILE_DOMAIN"
         fi
     fi
 fi
 
-GRADLE_DOMAIN_PROP=""
+GRADLE_ARGS="-PAPP_VERSION=$TARGET_APP_VERSION"
 if [ -n "$TARGET_DOMAIN" ]; then
     echo "[INFO] Injected Server Domain into APK: $TARGET_DOMAIN"
-    GRADLE_DOMAIN_PROP="-PSERVER_DOMAIN=$TARGET_DOMAIN"
+    GRADLE_ARGS="$GRADLE_ARGS -PSERVER_DOMAIN=$TARGET_DOMAIN"
 else
     echo "[INFO] No SERVER_DOMAIN or DOMAIN_NAME detected; using default fallback."
 fi
 
 # 5. Build APK
 echo "[INFO] Building HealthWatch Android APK..."
-cd "/home/alana/Desktop/healthwatch/mobile"
-gradle assembleDebug $GRADLE_DOMAIN_PROP --no-daemon
+cd "$REPO_ROOT/mobile"
+gradle assembleDebug $GRADLE_ARGS --no-daemon
 
-# 5. Copy output APK to frontend/public for phone download
-APK_SRC="/home/alana/Desktop/healthwatch/mobile/app/build/outputs/apk/debug/app-debug.apk"
-APK_DEST="/home/alana/Desktop/healthwatch/frontend/public/HealthWatch.apk"
-if [ -f "$APK_SRC" ]; then
-    cp "$APK_SRC" "$APK_DEST"
-    echo "[SUCCESS] Real Android APK created and deployed to: $APK_DEST"
-    ls -lh "$APK_DEST"
+# 6. Locate generated APK and deploy with versioned filename
+APK_OUTPUT_DIR="$REPO_ROOT/mobile/app/build/outputs/apk/debug"
+APK_SRC=""
+
+if [ -f "$APK_OUTPUT_DIR/HealthWatch-v${TARGET_APP_VERSION}.apk" ]; then
+    APK_SRC="$APK_OUTPUT_DIR/HealthWatch-v${TARGET_APP_VERSION}.apk"
+elif [ -f "$APK_OUTPUT_DIR/app-debug.apk" ]; then
+    APK_SRC="$APK_OUTPUT_DIR/app-debug.apk"
 else
-    echo "[ERROR] APK build output not found at $APK_SRC"
+    APK_SRC=$(find "$APK_OUTPUT_DIR" -name "*.apk" -type f | head -n 1)
+fi
+
+VERSIONED_NAME="HealthWatch-v${TARGET_APP_VERSION}.apk"
+
+if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
+    # Frontend downloads directory
+    mkdir -p "$REPO_ROOT/frontend/public"
+    cp "$APK_SRC" "$REPO_ROOT/frontend/public/$VERSIONED_NAME"
+    cp "$APK_SRC" "$REPO_ROOT/frontend/public/HealthWatch.apk"
+
+    # Backend downloads directory
+    mkdir -p "$REPO_ROOT/backend/app"
+    cp "$APK_SRC" "$REPO_ROOT/backend/app/$VERSIONED_NAME"
+    cp "$APK_SRC" "$REPO_ROOT/backend/app/HealthWatch.apk"
+
+    echo "[SUCCESS] Real Android APK created and deployed:"
+    echo "  -> $REPO_ROOT/frontend/public/$VERSIONED_NAME"
+    echo "  -> $REPO_ROOT/frontend/public/HealthWatch.apk"
+    echo "  -> $REPO_ROOT/backend/app/$VERSIONED_NAME"
+    echo "  -> $REPO_ROOT/backend/app/HealthWatch.apk"
+    ls -lh "$REPO_ROOT/frontend/public/$VERSIONED_NAME"
+else
+    echo "[ERROR] APK build output not found in $APK_OUTPUT_DIR"
     exit 1
 fi

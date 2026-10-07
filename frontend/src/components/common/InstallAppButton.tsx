@@ -14,8 +14,19 @@ export const InstallAppButton: React.FC<{ className?: string; variant?: 'header'
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
   const [isIOS, setIsIOS] = useState<boolean>(false);
+  const [appVersion, setAppVersion] = useState<string>('1.0.5');
 
   useEffect(() => {
+    // Dynamically retrieve configured app version from backend
+    fetch('/api/health')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.version) {
+          setAppVersion(data.version);
+        }
+      })
+      .catch(() => {});
+
     // Check if app is already running as standalone PWA
     const isStandaloneMode =
       window.matchMedia('(display-mode: standalone)').matches ||
@@ -134,19 +145,19 @@ export const InstallAppButton: React.FC<{ className?: string; variant?: 'header'
                   <span>Native Android App Package (.APK):</span>
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  REAL APP (6.8 MB)
+                  REAL NATIVE APP (v{appVersion})
                 </span>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
                 Install as a real Android application with 24/7 background location surveillance foreground service.
               </p>
               <a
-                href="/HealthWatch.apk"
-                download="HealthWatch.apk"
+                href={`/HealthWatch-v${appVersion}.apk`}
+                download={`HealthWatch-v${appVersion}.apk`}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>Download HealthWatch.apk (Direct Installer)</span>
+                <span>Download HealthWatch-v{appVersion}.apk</span>
               </a>
             </div>
 

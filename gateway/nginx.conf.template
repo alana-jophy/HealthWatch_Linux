@@ -46,7 +46,7 @@ server {
     }
 
     # Native Android APK Downloads
-    location ~* ^/(download|HealthWatch\.apk) {
+    location ~* ^/(download|HealthWatch.*\.apk) {
         proxy_pass http://backend_upstream;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

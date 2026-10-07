@@ -10,9 +10,10 @@ export default defineConfig({
       name: 'apk-mime-type',
       configureServer(server) {
         server.middlewares.use((req, res, next) => {
-          if (req.url && req.url.endsWith('.apk')) {
+          if (req.url && req.url.split('?')[0].endsWith('.apk')) {
+            const fileName = path.basename(req.url.split('?')[0]) || 'HealthWatch.apk';
             res.setHeader('Content-Type', 'application/vnd.android.package-archive');
-            res.setHeader('Content-Disposition', 'attachment; filename="HealthWatch.apk"');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
           }
           next();
         });

@@ -6,12 +6,42 @@ android {
     namespace = "com.healthwatch"
     compileSdk = 34
 
+    val resolvedVersion: String = run {
+        var ver = (project.findProperty("APP_VERSION") as? String)
+            ?: System.getenv("APP_VERSION")
+        if (ver.isNullOrBlank()) {
+            val rootEnvProd = file("../../.env.production")
+            val rootEnv = file("../../.env")
+            val targetEnv = if (rootEnvProd.exists()) rootEnvProd else if (rootEnv.exists()) rootEnv else null
+            if (targetEnv != null) {
+                val match = Regex("""^APP_VERSION\s*=\s*["']?([^"'\r\n]+)["']?""", RegexOption.MULTILINE).find(targetEnv.readText())
+                if (match != null) {
+                    ver = match.groupValues[1].trim()
+                }
+            }
+        }
+        ver?.takeIf { it.isNotBlank() } ?: "1.0.0"
+    }
+
+    val computedVersionCode: Int = run {
+        try {
+            val nums = resolvedVersion.split(".").map { it.filter { ch -> ch.isDigit() }.toIntOrNull() ?: 0 }
+            when (nums.size) {
+                1 -> nums[0]
+                2 -> nums[0] * 10000 + nums[1] * 100
+                else -> nums[0] * 10000 + nums[1] * 100 + nums[2]
+            }
+        } catch (_: Exception) {
+            1
+        }
+    }
+
     defaultConfig {
         applicationId = "com.healthwatch"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = computedVersionCode
+        versionName = resolvedVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -27,6 +57,7 @@ android {
         }.trimEnd('/')
 
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$serverUrl\"")
+        buildConfigField("String", "APP_VERSION_NAME", "\"$resolvedVersion\"")
     }
 
     signingConfigs {
@@ -58,6 +89,15 @@ android {
     buildFeatures {
         viewBinding = false
         buildConfig = true
+    }
+
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as? com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val vName = variant.versionName ?: resolvedVersion
+            output?.outputFileName = "HealthWatch-v${vName}.apk"
+        }
     }
 }
 

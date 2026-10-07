@@ -1,16 +1,20 @@
 package com.healthwatch.service;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -52,6 +56,7 @@ public class LocationMonitoringService extends Service {
     private OfflineLocationQueue offlineQueue;
     private ExecutorService serviceExecutor;
     private Handler mainHandler;
+    private PowerManager.WakeLock wakeLock;
 
     @Override
     public void onCreate() {
@@ -64,6 +69,12 @@ public class LocationMonitoringService extends Service {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         serviceExecutor = Executors.newSingleThreadExecutor();
         mainHandler = new Handler(Looper.getMainLooper());
+
+        PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        if (pm != null) {
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "HealthWatch:LocationWakeLock");
+            wakeLock.setReferenceCounted(false);
+        }
 
         createNotificationChannel();
 
@@ -212,6 +223,12 @@ public class LocationMonitoringService extends Service {
 
         Log.i(TAG, "Collected observation: (" + latitude + ", " + longitude + "), Accuracy: " + accuracy + ", Source: PATIENT_GPS");
 
+        if (wakeLock != null) {
+            try {
+                wakeLock.acquire(30000L); // 30-second failsafe timeout to prevent battery drain
+            } catch (Exception ignored) {}
+        }
+
         final String finalPatientId = patientId;
         serviceExecutor.execute(() -> {
             try {
@@ -229,6 +246,12 @@ public class LocationMonitoringService extends Service {
                         recordedAt,
                         "PATIENT_GPS"
                 ));
+            } finally {
+                if (wakeLock != null && wakeLock.isHeld()) {
+                    try {
+                        wakeLock.release();
+                    } catch (Exception ignored) {}
+                }
             }
         });
     }
@@ -296,12 +319,52 @@ public class LocationMonitoringService extends Service {
     }
 
     @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        Log.i(TAG, "Application task swiped away / closed from Recent Apps. Maintaining active GPS surveillance...");
+        scheduleServiceRestartIfNeeded();
+    }
+
+    @Override
     public void onDestroy() {
         super.onDestroy();
         stopLocationMonitoring();
         if (serviceExecutor != null) {
             serviceExecutor.shutdown();
         }
+        if (wakeLock != null && wakeLock.isHeld()) {
+            try {
+                wakeLock.release();
+            } catch (Exception ignored) {}
+        }
         Log.i(TAG, "LocationMonitoringService destroyed.");
+        scheduleServiceRestartIfNeeded();
+    }
+
+    private void scheduleServiceRestartIfNeeded() {
+        if (sessionManager == null) return;
+        String sessionId = sessionManager.getActiveSessionId();
+        if (sessionId != null && !sessionId.trim().isEmpty()) {
+            Log.i(TAG, "Active session detected (" + sessionId + "). Scheduling service resurrection via AlarmManager.");
+            Intent restartIntent = new Intent(getApplicationContext(), LocationMonitoringService.class);
+            restartIntent.setAction(ACTION_START);
+            restartIntent.setPackage(getPackageName());
+
+            PendingIntent restartPendingIntent = PendingIntent.getService(
+                    getApplicationContext(),
+                    999,
+                    restartIntent,
+                    PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE
+            );
+
+            AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+            if (alarmManager != null) {
+                alarmManager.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 1500,
+                        restartPendingIntent
+                );
+            }
+        }
     }
 }

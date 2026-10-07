@@ -40,9 +40,9 @@ Each microservice has its own dedicated Docker Hub README and sample environment
 
 | Microservice Image | Purpose | Base OS | Dedicated Docs | Sample `.env` |
 | :--- | :--- | :--- | :--- | :--- |
-| **`healthwatch-backend`** | FastAPI REST API, PostGIS spatial queries, JWT auth, outbreak analytics | Python 3.11 Slim | [backend/README.md](file:///home/alana/Desktop/healthwatch/docker/backend/README.md) | [env.backend.sample](file:///home/alana/Desktop/healthwatch/docker/env.backend.sample) |
-| **`healthwatch-frontend`** | React 18 SPA, Leaflet maps, Kerala geo-hierarchy, pre-built APK downloads | Nginx 1.25 Alpine | [frontend/README.md](file:///home/alana/Desktop/healthwatch/docker/frontend/README.md) | [env.frontend.sample](file:///home/alana/Desktop/healthwatch/docker/env.frontend.sample) |
-| **`healthwatch-gateway`** | Unified reverse proxy, Let's Encrypt TLS termination, rate limiting | Nginx Alpine | [gateway/README.md](file:///home/alana/Desktop/healthwatch/docker/gateway/README.md) | [env.gateway.sample](file:///home/alana/Desktop/healthwatch/docker/env.gateway.sample) |
+| **`healthwatch-backend`** | FastAPI REST API, PostGIS spatial queries, JWT auth, outbreak analytics | Python 3.11 Slim | [backend/README.md](file:///home/ubuntu/HealthWatch_Linux/docker/backend/README.md) | [env.backend.sample](file:///home/ubuntu/HealthWatch_Linux/docker/env.backend.sample) |
+| **`healthwatch-frontend`** | React 18 SPA, Leaflet maps, Kerala geo-hierarchy, pre-built APK downloads | Nginx 1.25 Alpine | [frontend/README.md](file:///home/ubuntu/HealthWatch_Linux/docker/frontend/README.md) | [env.frontend.sample](file:///home/ubuntu/HealthWatch_Linux/docker/env.frontend.sample) |
+| **`healthwatch-gateway`** | Unified reverse proxy, Let's Encrypt TLS termination, rate limiting | Nginx Alpine | [gateway/README.md](file:///home/ubuntu/HealthWatch_Linux/docker/gateway/README.md) | [env.gateway.sample](file:///home/ubuntu/HealthWatch_Linux/docker/env.gateway.sample) |
 | **`postgis/postgis:16-3.4`** | PostgreSQL database with spatial GIS extension | Debian Bullseye | Official Docker Hub | (Included in fullstack env) |
 | **`certbot/certbot:latest`** | Automated SSL certificate renewal daemon | Alpine Linux | Official Docker Hub | (Managed by Gateway) |
 
@@ -73,11 +73,11 @@ docker/
 
 ## Pushing Images & READMEs to Docker Hub
 
-The automation script [`push_to_dockerhub.sh`](file:///home/alana/Desktop/healthwatch/docker/push_to_dockerhub.sh) handles:
+The automation script [`push_to_dockerhub.sh`](file:///home/ubuntu/HealthWatch_Linux/docker/push_to_dockerhub.sh) handles:
 1. **Image Validation**: Checks that local microservices are built and ready.
 2. **Tagging**: Tags each local image with both your chosen version tag (`:${VERSION_TAG}`) and `:latest`.
 3. **Registry Push**: Pushes all images to your Docker Hub repository via `docker push`.
-4. **Automated Documentation Sync**: Authenticates with Docker Hub's v2 REST API to automatically update the **Repository Overview (README)** for all 3 images with their respective markdown documentation ([`docker/backend/README.md`](file:///home/alana/Desktop/healthwatch/docker/backend/README.md), [`docker/frontend/README.md`](file:///home/alana/Desktop/healthwatch/docker/frontend/README.md), and [`docker/gateway/README.md`](file:///home/alana/Desktop/healthwatch/docker/gateway/README.md)).
+4. **Automated Documentation Sync**: Authenticates with Docker Hub's v2 REST API to automatically update the **Repository Overview (README)** for all 3 images with their respective markdown documentation ([`docker/backend/README.md`](file:///home/ubuntu/HealthWatch_Linux/docker/backend/README.md), [`docker/frontend/README.md`](file:///home/ubuntu/HealthWatch_Linux/docker/frontend/README.md), and [`docker/gateway/README.md`](file:///home/ubuntu/HealthWatch_Linux/docker/gateway/README.md)).
 
 ### Prerequisites
 

@@ -157,8 +157,8 @@ docker exec healthwatch-frontend npm run build
 
 HealthWatch microservices are fully containerized and can be built, tagged, and published directly to Docker Hub:
 
-- **Architecture & Catalog**: See [`docker/README.md`](file:///home/alana/Desktop/healthwatch/docker/README.md) for complete microservice topology, environment specifications, and individual container READMEs.
-- **Production Deployment Guide**: See [`README_DEPLOYMENT.md`](file:///home/alana/Desktop/healthwatch/README_DEPLOYMENT.md) for step-by-step domain configuration and automated Let's Encrypt SSL/TLS termination.
+- **Architecture & Catalog**: See [`docker/README.md`](file:///home/ubuntu/HealthWatch_Linux/docker/README.md) for complete microservice topology, environment specifications, and individual container READMEs.
+- **Production Deployment Guide**: See [`README_DEPLOYMENT.md`](file:///home/ubuntu/HealthWatch_Linux/README_DEPLOYMENT.md) for step-by-step domain configuration and automated Let's Encrypt SSL/TLS termination.
 - **Publish to Docker Hub**:
   ```bash
   # 1. Build production microservice images
@@ -167,7 +167,7 @@ HealthWatch microservices are fully containerized and can be built, tagged, and 
   # 2. Tag, push images, and upload markdown documentation to Docker Hub overview via API
   ./docker/push_to_dockerhub.sh -u your-dockerhub-username -t 1.0.0 --token "dckr_pat_xxxx"
   ```
-- **Deploy Anywhere**: Pull and run the stack anywhere using [`docker/docker-compose.hub.yml`](file:///home/alana/Desktop/healthwatch/docker/docker-compose.hub.yml).
+- **Deploy Anywhere**: Pull and run the stack anywhere using [`docker/docker-compose.hub.yml`](file:///home/ubuntu/HealthWatch_Linux/docker/docker-compose.hub.yml).
 
 ---
 

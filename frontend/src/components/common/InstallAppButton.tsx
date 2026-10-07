@@ -14,18 +14,31 @@ export const InstallAppButton: React.FC<{ className?: string; variant?: 'header'
   const [isStandalone, setIsStandalone] = useState<boolean>(false);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
   const [isIOS, setIsIOS] = useState<boolean>(false);
-  const [appVersion, setAppVersion] = useState<string>('1.0.5');
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [cacheBuster, setCacheBuster] = useState<number>(Date.now());
 
   useEffect(() => {
-    // Dynamically retrieve configured app version from backend
-    fetch('/api/health')
+    // Dynamically retrieve configured app version from backend with strict cache-busting
+    fetch(`/api/apk/info?_t=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.version) {
           setAppVersion(data.version);
+          setCacheBuster(Date.now());
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // Fallback to /api/health if /api/apk/info is unavailable
+        fetch(`/api/health?_t=${Date.now()}`, { cache: 'no-store' })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && data.version) {
+              setAppVersion(data.version);
+              setCacheBuster(Date.now());
+            }
+          })
+          .catch(() => {});
+      });
 
     // Check if app is already running as standalone PWA
     const isStandaloneMode =
@@ -145,19 +158,19 @@ export const InstallAppButton: React.FC<{ className?: string; variant?: 'header'
                   <span>Native Android App Package (.APK):</span>
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  REAL NATIVE APP (v{appVersion})
+                  REAL NATIVE APP {appVersion ? `(v${appVersion})` : '(LATEST)'}
                 </span>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
                 Install as a real Android application with 24/7 background location surveillance foreground service.
               </p>
               <a
-                href={`/HealthWatch-v${appVersion}.apk`}
-                download={`HealthWatch-v${appVersion}.apk`}
+                href={appVersion ? `/HealthWatch-v${appVersion}.apk?t=${cacheBuster}` : `/download/healthwatch.apk?t=${cacheBuster}`}
+                download={appVersion ? `HealthWatch-v${appVersion}.apk` : 'HealthWatch.apk'}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>Download HealthWatch-v{appVersion}.apk</span>
+                <span>Download HealthWatch{appVersion ? `-v${appVersion}` : ''}.apk</span>
               </a>
             </div>
 

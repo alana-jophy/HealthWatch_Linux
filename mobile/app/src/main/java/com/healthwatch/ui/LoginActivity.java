@@ -200,9 +200,18 @@ public class LoginActivity extends AppCompatActivity {
         serverConfigText.setTextSize(12f);
         serverConfigText.setTextColor(Color.parseColor("#38BDF8"));
         serverConfigText.setGravity(Gravity.CENTER);
-        serverConfigText.setPadding(0, 36, 0, 16);
+        serverConfigText.setPadding(0, 36, 0, 8);
         serverConfigText.setOnClickListener(v -> showServerConfigDialog(serverConfigText));
         container.addView(serverConfigText);
+
+        // App Version Display
+        TextView versionText = new TextView(this);
+        versionText.setText("HealthWatch Mobile App v" + com.healthwatch.BuildConfig.APP_VERSION_NAME);
+        versionText.setTextSize(11f);
+        versionText.setTextColor(Color.parseColor("#64748B"));
+        versionText.setGravity(Gravity.CENTER);
+        versionText.setPadding(0, 0, 0, 24);
+        container.addView(versionText);
 
         root.addView(container);
         setContentView(root);

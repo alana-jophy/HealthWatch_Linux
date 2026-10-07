@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 import os
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+import shutil
+from fastapi import FastAPI, HTTPException, status
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
@@ -23,12 +24,56 @@ from app.db.init_db import init_db
 from app.db.session import check_db_connection
 
 
+def cleanup_obsolete_apks() -> int:
+    """Scans the backend application directory and purges any APK files
+    belonging to previous/deprecated versions, preserving only the current active version."""
+    base_dir = os.path.dirname(__file__)
+    current_ver = settings.APP_VERSION
+    active_version_file = f"HealthWatch-v{current_ver}.apk"
+    canonical_file = "HealthWatch.apk"
+    removed = 0
+
+    try:
+        if not os.path.exists(base_dir):
+            return 0
+        for fname in os.listdir(base_dir):
+            if not fname.endswith(".apk"):
+                continue
+            # Target versioned APKs that do not match the active release
+            if fname.startswith("HealthWatch-") and fname != active_version_file and fname != f"HealthWatch-{current_ver}.apk":
+                full_path = os.path.join(base_dir, fname)
+                try:
+                    os.remove(full_path)
+                    logger.warning(
+                        f"[APK PURGE] Removed obsolete APK installer from server: {fname} "
+                        f"(Active target: {active_version_file})"
+                    )
+                    removed += 1
+                except Exception as err:
+                    logger.error(f"[APK PURGE ERROR] Could not remove {fname}: {err}")
+
+        # Ensure canonical HealthWatch.apk matches active version APK if present
+        active_path = os.path.join(base_dir, active_version_file)
+        canonical_path = os.path.join(base_dir, canonical_file)
+        if os.path.exists(active_path):
+            shutil.copyfile(active_path, canonical_path)
+    except Exception as exc:
+        logger.error(f"[APK PURGE] Error scanning APK directory: {exc}")
+
+    return removed
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan context for startup and shutdown procedures."""
     # Startup
     setup_logging()
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION} in [{settings.ENVIRONMENT}] mode")
+
+    # Purge old APK files from server disk on application boot
+    cleaned_count = cleanup_obsolete_apks()
+    if cleaned_count > 0:
+        logger.info(f"Purged {cleaned_count} obsolete APK release(s) on server boot")
     
     logger.info("Verifying database connectivity...")
     db_check = check_db_connection()
@@ -92,20 +137,41 @@ def create_application() -> FastAPI:
 
     @application.get("/download/app", tags=["Mobile App"], summary="Download Native Android APK")
     @application.get("/download/healthwatch.apk", tags=["Mobile App"], summary="Download Native Android APK")
-    @application.get("/HealthWatch.apk", tags=["Mobile App"], summary="Download Native Android APK")
-    @application.get("/HealthWatch-{version_tag}.apk", tags=["Mobile App"], summary="Download Versioned Native Android APK")
+    @application.api_route("/HealthWatch.apk", methods=["GET", "HEAD"], tags=["Mobile App"], summary="Download Native Android APK")
+    @application.api_route("/HealthWatch-{version_tag}.apk", methods=["GET", "HEAD"], tags=["Mobile App"], summary="Download Versioned Native Android APK")
     def download_android_apk(version_tag: str = None):
         base_dir = os.path.dirname(__file__)
-        v_name = f"HealthWatch-v{settings.APP_VERSION}.apk"
+        current_version = settings.APP_VERSION
+        v_name = f"HealthWatch-v{current_version}.apk"
 
-        candidates = []
+        # Anti-stale-version redirect:
+        # If the client specifies an outdated version tag (e.g. HealthWatch-v1.0.5.apk),
+        # redirect immediately (307 Temporary Redirect) to the current active release.
+        # This completely guarantees that no client phone downloads or installs an obsolete version.
         if version_tag:
             clean_tag = version_tag.lstrip("v")
-            candidates.append(os.path.join(base_dir, f"HealthWatch-{version_tag}.apk"))
-            candidates.append(os.path.join(base_dir, f"HealthWatch-v{clean_tag}.apk"))
-        candidates.append(os.path.join(base_dir, v_name))
-        candidates.append(os.path.join(base_dir, f"HealthWatch-{settings.APP_VERSION}.apk"))
-        candidates.append(os.path.join(base_dir, "HealthWatch.apk"))
+            if clean_tag != current_version:
+                logger.warning(
+                    f"[APK ROUTE] Client requested obsolete version '{version_tag}'. "
+                    f"Redirecting to active release 'v{current_version}'."
+                )
+                return RedirectResponse(
+                    url=f"/HealthWatch-v{current_version}.apk",
+                    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+                    headers={
+                        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+                        "Pragma": "no-cache",
+                        "Expires": "0",
+                        "X-App-Version": current_version,
+                        "X-Requested-Version": version_tag,
+                    },
+                )
+
+        candidates = [
+            os.path.join(base_dir, v_name),
+            os.path.join(base_dir, f"HealthWatch-{current_version}.apk"),
+            os.path.join(base_dir, "HealthWatch.apk"),
+        ]
 
         target_path = None
         for cand in candidates:
@@ -114,17 +180,51 @@ def create_application() -> FastAPI:
                 break
 
         if not target_path:
-            raise HTTPException(status_code=404, detail="HealthWatch APK installer not found on server")
+            # Fallback: scan for any HealthWatch*.apk in base_dir
+            for f in os.listdir(base_dir):
+                if f.endswith(".apk") and f.startswith("HealthWatch"):
+                    target_path = os.path.join(base_dir, f)
+                    break
 
-        download_name = os.path.basename(target_path)
-        if download_name == "HealthWatch.apk":
-            download_name = v_name
+        if not target_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"HealthWatch APK installer (v{current_version}) not found on server",
+            )
 
         return FileResponse(
             path=target_path,
             media_type="application/vnd.android.package-archive",
-            filename=download_name,
+            filename=v_name,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+                "X-App-Version": current_version,
+            },
         )
+
+    @application.api_route("/api/apk/info", methods=["GET", "HEAD"], tags=["Mobile App"], summary="Get Current APK Release Metadata")
+    def get_apk_release_info():
+        base_dir = os.path.dirname(__file__)
+        current_version = settings.APP_VERSION
+        v_name = f"HealthWatch-v{current_version}.apk"
+        apk_path = os.path.join(base_dir, v_name)
+        if not os.path.exists(apk_path):
+            apk_path = os.path.join(base_dir, "HealthWatch.apk")
+
+        file_size = os.path.getsize(apk_path) if os.path.exists(apk_path) else 0
+        exists = os.path.exists(apk_path)
+
+        return {
+            "app_name": settings.APP_NAME,
+            "version": current_version,
+            "available": exists,
+            "size_bytes": file_size,
+            "download_url": f"/HealthWatch-v{current_version}.apk",
+            "canonical_url": "/HealthWatch.apk",
+            "filename": v_name,
+        }
 
     @application.get("/", tags=["Root"])
     def root():
@@ -133,6 +233,7 @@ def create_application() -> FastAPI:
             "version": settings.APP_VERSION,
             "apk_download": f"/HealthWatch-v{settings.APP_VERSION}.apk",
             "apk_filename": f"HealthWatch-v{settings.APP_VERSION}.apk",
+            "apk_info": "/api/apk/info",
             "status": "online",
             "docs": "/docs",
             "health": "/api/health",

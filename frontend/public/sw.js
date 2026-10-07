@@ -1,5 +1,5 @@
 // HealthWatch Lightweight Service Worker
-const CACHE_NAME = 'healthwatch-app-v1';
+const CACHE_NAME = 'healthwatch-app-v2';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -23,7 +23,21 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.map(async (key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+          // Also purge any accidental APK entries in active cache
+          try {
+            const cache = await caches.open(key);
+            const requests = await cache.keys();
+            await Promise.all(
+              requests
+                .filter((req) => req.url.includes('.apk') || req.url.includes('/download/'))
+                .map((req) => cache.delete(req))
+            );
+          } catch (_) {}
+        })
       );
     })
   );
@@ -31,8 +45,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Pass-through API calls and dynamic telemetry straight to network
-  if (event.request.method !== 'GET' || event.request.url.includes('/api/')) {
+  const url = event.request.url;
+
+  // Pass-through API calls, APK downloads, and non-GET requests straight to network
+  // CRITICAL: NEVER intercept or cache Android APK packages in Service Worker CacheStorage!
+  if (
+    event.request.method !== 'GET' ||
+    url.includes('/api/') ||
+    url.endsWith('.apk') ||
+    url.includes('.apk') ||
+    url.includes('/download/') ||
+    url.includes('HealthWatch')
+  ) {
     return;
   }
 

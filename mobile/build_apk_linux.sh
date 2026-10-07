@@ -24,9 +24,10 @@ echo "sdk.dir=$ANDROID_HOME" > "$REPO_ROOT/mobile/local.properties"
 # 1. Download command line tools if not present
 if [ ! -d "$ANDROID_HOME/cmdline-tools/latest" ]; then
     echo "[INFO] Downloading Android command line tools..."
-    cd "$HOME"
+    mkdir -p "$ANDROID_HOME/cmdline-tools"
     curl -sLo cmdline-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
     unzip -q cmdline-tools.zip -d "$ANDROID_HOME/cmdline-tools"
+    rm -rf "$ANDROID_HOME/cmdline-tools/latest"
     mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
     rm -f cmdline-tools.zip
     echo "[INFO] Command line tools installed."
@@ -112,15 +113,25 @@ fi
 VERSIONED_NAME="HealthWatch-v${TARGET_APP_VERSION}.apk"
 
 if [ -n "$APK_SRC" ] && [ -f "$APK_SRC" ]; then
-    # Frontend downloads directory
+    echo "[INFO] Cleaning up older APK files from frontend and backend directories..."
+    # 1. Clean old APK versions from Frontend public directory
     mkdir -p "$REPO_ROOT/frontend/public"
-    cp "$APK_SRC" "$REPO_ROOT/frontend/public/$VERSIONED_NAME"
-    cp "$APK_SRC" "$REPO_ROOT/frontend/public/HealthWatch.apk"
+    find "$REPO_ROOT/frontend/public" -maxdepth 1 -name "HealthWatch-*.apk" ! -name "$VERSIONED_NAME" -type f -exec rm -v {} + 2>/dev/null || true
 
-    # Backend downloads directory
+    # 2. Clean old APK versions from Backend app directory
     mkdir -p "$REPO_ROOT/backend/app"
-    cp "$APK_SRC" "$REPO_ROOT/backend/app/$VERSIONED_NAME"
-    cp "$APK_SRC" "$REPO_ROOT/backend/app/HealthWatch.apk"
+    find "$REPO_ROOT/backend/app" -maxdepth 1 -name "HealthWatch-*.apk" ! -name "$VERSIONED_NAME" -type f -exec rm -v {} + 2>/dev/null || true
+
+    # 3. Deploy new active APK to Frontend
+    cp -f "$APK_SRC" "$REPO_ROOT/frontend/public/$VERSIONED_NAME"
+    cp -f "$APK_SRC" "$REPO_ROOT/frontend/public/HealthWatch.apk"
+
+    # 4. Deploy new active APK to Backend
+    cp -f "$APK_SRC" "$REPO_ROOT/backend/app/$VERSIONED_NAME"
+    cp -f "$APK_SRC" "$REPO_ROOT/backend/app/HealthWatch.apk"
+
+    # 5. Clean stale build output artifacts
+    find "$APK_OUTPUT_DIR" -maxdepth 1 -name "*.apk" ! -name "$VERSIONED_NAME" -type f -delete 2>/dev/null || true
 
     echo "[SUCCESS] Real Android APK created and deployed:"
     echo "  -> $REPO_ROOT/frontend/public/$VERSIONED_NAME"

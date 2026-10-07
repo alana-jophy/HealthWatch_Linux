@@ -103,6 +103,7 @@ mobile/.externalNativeBuild
 mobile/.cxx/
 *.keystore
 *.jks
+*HealthWatch-v*.apk
 
 # AI / ML Model Artifacts & Data
 ai/models/*.pkl
@@ -116,3 +117,4 @@ ai/notebooks/.ipynb_checkpoints/
 docker-compose.override.yml
 powershell.cmd
 platform-tools/
+*.idsig

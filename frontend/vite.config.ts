@@ -14,6 +14,9 @@ export default defineConfig({
             const fileName = path.basename(req.url.split('?')[0]) || 'HealthWatch.apk';
             res.setHeader('Content-Type', 'application/vnd.android.package-archive');
             res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
           }
           next();
         });

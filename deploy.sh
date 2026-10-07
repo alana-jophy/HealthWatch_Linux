@@ -64,22 +64,54 @@ load_env() {
     export APP_VERSION
 }
 
+cleanup_old_apks() {
+    echo -e "\n${BLUE}[APK CLEANUP] Scanning and purging obsolete APK versions from server...${NC}"
+    local TARGET_APK="HealthWatch-v${APP_VERSION}.apk"
+    local REMOVED_COUNT=0
+
+    for DIR in "frontend/public" "backend/app"; do
+        if [ -d "$DIR" ]; then
+            while IFS= read -r old_apk; do
+                if [ -n "$old_apk" ]; then
+                    echo -e "${YELLOW}  -> Purged obsolete APK file: $old_apk${NC}"
+                    rm -f "$old_apk"
+                    REMOVED_COUNT=$((REMOVED_COUNT + 1))
+                fi
+            done < <(find "$DIR" -maxdepth 1 -name "HealthWatch-*.apk" ! -name "$TARGET_APK" -type f)
+            find "$DIR" -maxdepth 1 -name "*.idsig" -type f -delete 2>/dev/null || true
+        fi
+    done
+
+    # Ensure frontend and backend have identical copies of the active APK
+    if [ -f "backend/app/$TARGET_APK" ]; then
+        cp -f "backend/app/$TARGET_APK" "backend/app/HealthWatch.apk"
+        mkdir -p "frontend/public"
+        cp -f "backend/app/$TARGET_APK" "frontend/public/$TARGET_APK"
+        cp -f "backend/app/$TARGET_APK" "frontend/public/HealthWatch.apk"
+    elif [ -f "frontend/public/$TARGET_APK" ]; then
+        cp -f "frontend/public/$TARGET_APK" "frontend/public/HealthWatch.apk"
+        mkdir -p "backend/app"
+        cp -f "frontend/public/$TARGET_APK" "backend/app/$TARGET_APK"
+        cp -f "frontend/public/$TARGET_APK" "backend/app/HealthWatch.apk"
+    fi
+
+    echo -e "${GREEN}✓ Pruned $REMOVED_COUNT obsolete APK file(s). Active release synchronized: v${APP_VERSION}.${NC}"
+}
+
 build_apk() {
+    cleanup_old_apks
     if [ -f "mobile/build_apk_linux.sh" ] && command -v java &>/dev/null; then
         echo -e "\n${BLUE}[APK] Compiling HealthWatch Android APK for domain '${DOMAIN_NAME}' (v${APP_VERSION})...${NC}"
         SERVER_DOMAIN="${DOMAIN_NAME}" ENABLE_HTTPS="${ENABLE_HTTPS}" APP_VERSION="${APP_VERSION}" bash mobile/build_apk_linux.sh || echo -e "${YELLOW}Notice: APK compilation skipped or failed; existing APK will be used.${NC}"
+        cleanup_old_apks
     else
-        echo -e "\n${BLUE}[APK] Ensuring versioned APK artifacts for v${APP_VERSION}...${NC}"
-        if [ -f "frontend/public/HealthWatch.apk" ]; then
-            cp -f "frontend/public/HealthWatch.apk" "frontend/public/HealthWatch-v${APP_VERSION}.apk" 2>/dev/null || true
-        fi
-        if [ -f "backend/app/HealthWatch.apk" ]; then
-            cp -f "backend/app/HealthWatch.apk" "backend/app/HealthWatch-v${APP_VERSION}.apk" 2>/dev/null || true
-        fi
+        echo -e "\n${BLUE}[APK] Ensuring synchronized versioned APK artifacts for v${APP_VERSION}...${NC}"
+        cleanup_old_apks
     fi
 }
 
 build_images() {
+    cleanup_old_apks
     build_apk
     echo -e "\n${BLUE}[2/4] Building production microservices Docker images (Tag: ${APP_VERSION})...${NC}"
     APP_VERSION="${APP_VERSION}" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" build
@@ -245,12 +277,16 @@ case "$ACTION" in
         echo -e "\n${BLUE}Verifying Kerala administrative spatial hierarchy in database...${NC}"
         docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec backend python -m app.scripts.verify_kerala_wards
         ;;
+    clean-apks|prune-apks)
+        cleanup_old_apks
+        ;;
     *)
-        echo -e "\nUsage: $0 {http|https|build|apk|stop|status|logs|import-wards|verify-wards} [version_tag]"
+        echo -e "\nUsage: $0 {http|https|build|apk|clean-apks|stop|status|logs|import-wards|verify-wards} [version_tag]"
         echo -e "  ${CYAN}./deploy.sh build [tag]${NC}        - Build production Docker images with specific tag"
         echo -e "  ${CYAN}./deploy.sh http [tag]${NC}         - Build and launch in HTTP mode on port 80"
         echo -e "  ${CYAN}./deploy.sh https [tag]${NC}        - Build and launch in HTTPS mode with Let's Encrypt SSL on port 443"
         echo -e "  ${CYAN}./deploy.sh apk${NC}                - Compile Android APK with domain injected from .env configuration"
+        echo -e "  ${CYAN}./deploy.sh clean-apks${NC}         - Purge obsolete APK versions and synchronize active release"
         echo -e "  ${CYAN}./deploy.sh import-wards${NC}       - Import official_kerala_wards.csv into PostgreSQL/PostGIS database"
         echo -e "  ${CYAN}./deploy.sh verify-wards${NC}       - Run complete integrity check on all districts, local bodies, and wards"
         echo -e "  ${CYAN}./deploy.sh stop${NC}               - Stop all production containers"
